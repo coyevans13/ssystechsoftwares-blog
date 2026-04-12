@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Build a Sports Prediction API with Python in 2026 | SsysTech Softwares</title>
+    <meta name="description" content="Step-by-step guide to building a sports prediction API with Python, XGBoost, and FastAPI. Real code snippets for NBA, MLB, NHL, and esports predictions.">
+    <meta name="robots" content="index,follow">
+    <meta property="og:title" content="How to Build a Sports Prediction API with Python in 2026">
+    <meta property="og:description" content="From data collection to model training to serving live predictions. Working code for XGBoost + isotonic calibration.">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://ssystechsoftwares.com/">
+    <link rel="canonical" href="https://ssystechsoftwares.com/">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0f1a; color: #d1d5db; line-height: 1.7; }
+        .container { max-width: 780px; margin: 0 auto; padding: 40px 20px; }
+        h1 { color: #ffffff; font-size: 32px; margin-bottom: 12px; line-height: 1.3; }
+        h2 { color: #ffffff; font-size: 22px; margin: 40px 0 16px; padding-top: 20px; border-top: 1px solid #1f2937; }
+        h3 { color: #e5e7eb; font-size: 17px; margin: 24px 0 10px; }
+        p { margin-bottom: 16px; font-size: 16px; }
+        a { color: #22c55e; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #1f2937; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Monaco, monospace; font-size: 14px; color: #86efac; }
+        pre { background: #0d1117; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; }
+        pre code { background: none; padding: 0; font-size: 13px; line-height: 1.6; }
+        .subtitle { color: #9ca3af; font-size: 16px; margin-bottom: 32px; }
+        .date { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+        .cta-box { background: #1f2937; border: 1px solid #22c55e40; border-radius: 12px; padding: 24px; margin: 32px 0; text-align: center; }
+        .cta-box h3 { color: #22c55e; margin: 0 0 8px; border: none; padding: 0; }
+        .cta-box p { color: #9ca3af; margin-bottom: 16px; }
+        .cta-btn { display: inline-block; background: #22c55e; color: #0a0f1a; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; }
+        .cta-btn:hover { background: #16a34a; text-decoration: none; }
+        .cta-btn-secondary { display: inline-block; background: #1f2937; color: #d1d5db; padding: 10px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; text-decoration: none; margin-left: 12px; border: 1px solid #374151; }
+        ol, ul { margin: 0 0 16px 24px; }
+        li { margin-bottom: 6px; }
+        strong { color: #e5e7eb; }
+        .nav { border-bottom: 1px solid #1f2937; padding: 16px 0; margin-bottom: 40px; }
+        .nav a { color: #9ca3af; font-size: 14px; font-weight: 500; }
+        .footer { border-top: 1px solid #1f2937; margin-top: 60px; padding-top: 24px; color: #6b7280; font-size: 13px; text-align: center; }
+        .json-block { color: #86efac; }
+        @media (max-width: 640px) { h1 { font-size: 24px; } .container { padding: 20px 16px; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="nav">
+        <a href="/">SsysTech Softwares</a> &middot; <a href="https://zenhodl.net">ZenHodl</a>
+    </div>
+
+    <h1>How to Build a Sports Prediction API with Python in 2026</h1>
+    <p class="subtitle">From data collection to model training to serving live win probabilities via REST — with working code.</p>
+    <p class="date">Published April 12, 2026 &middot; 8 min read</p>
+
+    <p>If you've ever wanted to predict the outcome of a live NBA game, an MLB matchup, or a CS2 esports match using real data, you're in the right place. In this guide, we'll walk through the core components of a sports prediction API — from data collection to model training to serving live predictions.</p>
+
+    <p>By the end, you'll understand the architecture behind systems like <a href="https://zenhodl.net/docs">ZenHodl's prediction API</a>, which serves calibrated win probabilities for 10 sports in real-time.</p>
+
+    <h2>What a Sports Prediction API Actually Does</h2>
+
+    <p>A prediction API takes in a game state (score, time remaining, team quality) and returns a probability:</p>
+
+<pre><code class="json-block">GET /v1/games?sport=NBA
+
+{
+  "game_id": "nba_2026041201",
+  "home_team": "BOS",
+  "away_team": "MIA",
+  "home_score": 58,
+  "away_score": 45,
+  "period": 3,
+  "home_win_probability": 0.847,
+  "model": "xgboost_v3_calibrated",
+  "updated_at": "2026-04-12T02:30:00Z"
+}</code></pre>
+
+    <p>The key challenge isn't building the API endpoint — it's making the probability estimate <strong>accurate and well-calibrated</strong>. A calibrated model means: when it says 70%, the team actually wins ~70% of the time.</p>
+
+    <h2>Step 1: Collect Historical Game Data</h2>
+
+    <p>You need play-by-play or score-update snapshots with timestamps. The best free source in 2026:</p>
+
+    <p><strong>ESPN API</strong> (free, unofficial):</p>
+
+<pre><code>import requests
+
+def get_nba_scoreboard():
+    url = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
+    resp = requests.get(url, timeout=10)
+    data = resp.json()
+
+    games = []
+    for event in data.get("events", []):
+        competition = event["competitions"][0]
+        home = competition["competitors"][0]
+        away = competition["competitors"][1]
+
+        games.append({
+            "game_id": event["id"],
+            "home_team": home["team"]["abbreviation"],
+            "away_team": away["team"]["abbreviation"],
+            "home_score": int(home["score"]),
+            "away_score": int(away["score"]),
+            "period": competition.get("status", {}).get("period", 0),
+            "clock": competition.get("status", {}).get("displayClock", ""),
+        })
+    return games</code></pre>
+
+    <p>For historical data, you'll want 3-5 seasons. Sources include <a href="https://www.basketball-reference.com/">Basketball Reference</a> for NBA, <a href="https://www.fangraphs.com/">FanGraphs</a> for MLB, and <a href="https://github.com/JeffSackmann">Jeff Sackmann's GitHub</a> for tennis.</p>
+
+    <h2>Step 2: Engineer Features</h2>
+
+    <p>Raw scores aren't enough. You need features that capture <strong>game context</strong>:</p>
+
+<pre><code>def build_features(game_state, team_stats, elo_ratings):
+    home = game_state["home_team"]
+    away = game_state["away_team"]
+    score_diff = game_state["home_score"] - game_state["away_score"]
+    time_fraction = 1 - (game_state["seconds_remaining"] / 2880)
+
+    return {
+        "score_diff": score_diff,
+        "seconds_remaining": game_state["seconds_remaining"],
+        "period": game_state["period"],
+        "time_fraction": time_fraction,
+        "elo_diff": elo_ratings.get(home, 1500) - elo_ratings.get(away, 1500),
+        "ortg_diff": team_stats[home]["ortg"] - team_stats[away]["ortg"],
+        "drtg_diff": team_stats[home]["drtg"] - team_stats[away]["drtg"],
+        "score_diff_x_tf": score_diff * time_fraction,
+        "score_diff_sq": score_diff ** 2,
+    }</code></pre>
+
+    <p>The most important features by XGBoost importance:</p>
+    <ol>
+        <li><strong>score_diff</strong> (~25%) — the current lead</li>
+        <li><strong>elo_diff</strong> (~15%) — pre-game team quality gap</li>
+        <li><strong>time_fraction</strong> (~12%) — how much game is left</li>
+        <li><strong>score_diff × time_fraction</strong> (~10%) — a 10-point lead means different things at halftime vs 2 minutes left</li>
+        <li><strong>offensive/defensive ratings</strong> (~8% each) — team efficiency metrics</li>
+    </ol>
+
+    <h2>Step 3: Train the Model</h2>
+
+    <p>XGBoost is the standard for tabular sports prediction:</p>
+
+<pre><code>import xgboost as xgb
+from sklearn.metrics import brier_score_loss, roc_auc_score
+from sklearn.isotonic import IsotonicRegression
+
+X_train, X_test = X[:split_idx], X[split_idx:]
+y_train, y_test = y[:split_idx], y[split_idx:]
+
+model = xgb.XGBClassifier(
+    n_estimators=300, max_depth=5,
+    learning_rate=0.05, subsample=0.8,
+    colsample_bytree=0.8, eval_metric="logloss",
+)
+model.fit(X_train, y_train)
+
+raw_probs = model.predict_proba(X_test)[:, 1]
+print(f"Brier score: {brier_score_loss(y_test, raw_probs):.4f}")
+print(f"ROC AUC: {roc_auc_score(y_test, raw_probs):.4f}")</code></pre>
+
+    <p><strong>Critical: use walk-forward splits, not random splits.</strong> Random splits leak future game information into training. Walk-forward means all training data is older than all test data.</p>
+
+    <h2>Step 4: Calibrate the Probabilities</h2>
+
+    <p>Raw XGBoost outputs are often overconfident. Isotonic regression fixes this:</p>
+
+<pre><code>calibrator = IsotonicRegression(y_min=0.01, y_max=0.99, out_of_bounds="clip")
+calibrator.fit(cal_probs, y_cal)
+
+calibrated = calibrator.transform(raw_probs)
+print(f"Brier AFTER calibration: {brier_score_loss(y_test, calibrated):.4f}")</code></pre>
+
+    <p>After calibration, when your model says 70%, teams should actually win ~70% of the time. For reference, <a href="https://zenhodl.net/methodology">ZenHodl's production models</a> achieve Expected Calibration Error of 0.002 across NBA, NHL, MLB, and LoL.</p>
+
+    <h2>Step 5: Serve via FastAPI</h2>
+
+<pre><code>from fastapi import FastAPI
+import pickle
+
+app = FastAPI()
+
+with open("wp_model_NBA.pkl", "rb") as f:
+    model_data = pickle.load(f)
+model = model_data["model"]
+calibrator = model_data["calibrator"]
+
+@app.get("/v1/predict")
+def predict(home_team: str, away_team: str, home_score: int,
+            away_score: int, period: int, seconds_remaining: int):
+
+    features = build_features(...)
+    raw = model.predict_proba([features])[0][1]
+    calibrated = calibrator.transform([raw])[0]
+
+    return {
+        "home_team": home_team,
+        "home_win_probability": round(float(calibrated), 4),
+    }</code></pre>
+
+    <h2>Step 6: Add Real-Time Overlays</h2>
+
+    <p>A static model isn't enough for live prediction. You need overlays:</p>
+
+    <ul>
+        <li><strong>Injury adjustments</strong> — if a star player is ruled out mid-game, shift the probability</li>
+        <li><strong>Live recalibration</strong> — rolling isotonic refit on recent predictions to catch model drift</li>
+        <li><strong>Momentum features</strong> — scoring runs in basketball, power plays in hockey</li>
+    </ul>
+
+    <p>These stack on top of the base prediction and are capped at ±20% total adjustment.</p>
+
+    <div class="cta-box">
+        <h3>Skip the build — use calibrated predictions directly</h3>
+        <p>ZenHodl's API serves real-time win probabilities for 10 sports with a 7-day free trial.</p>
+        <a href="https://zenhodl.net/pricing" class="cta-btn">Try the API Free</a>
+        <a href="https://zenhodl.net/results" class="cta-btn-secondary">See Live Results</a>
+    </div>
+
+    <h2>What You Can Build</h2>
+
+    <ul>
+        <li><strong>Trading bots</strong> for prediction markets like <a href="https://polymarket.com">Polymarket</a> or <a href="https://kalshi.com">Kalshi</a></li>
+        <li><strong>Live dashboards</strong> showing real-time win probabilities</li>
+        <li><strong>API services</strong> for other developers and researchers</li>
+    </ul>
+
+    <h2>Further Reading</h2>
+    <ul>
+        <li><a href="https://zenhodl.net/docs">ZenHodl API Documentation</a> — endpoint reference and authentication</li>
+        <li><a href="https://zenhodl.net/methodology">Model Methodology</a> — how production models are trained and calibrated</li>
+        <li><a href="https://zenhodl.net/results">Live Trading Results</a> — verified on-chain performance across 10 sports</li>
+        <li><a href="https://zenhodl.net/launch">Prediction Bot Course</a> — 6 Jupyter notebooks from zero to a live bot</li>
+    </ul>
+
+    <div class="footer">
+        <p>&copy; 2026 SsysTech Softwares &middot; <a href="https://zenhodl.net">ZenHodl</a></p>
+    </div>
+</div>
+</body>
+</html>
