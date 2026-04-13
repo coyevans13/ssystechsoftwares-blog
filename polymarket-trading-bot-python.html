@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Build a Polymarket Trading Bot in Python (2026 Guide) | SsysTech Softwares</title>
+    <meta name="description" content="Step-by-step tutorial to build an automated Polymarket trading bot in Python. Covers API setup, odds parsing, edge detection, and live execution with real code examples.">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://ssystechsoftwares.com/polymarket-trading-bot-python">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0f1a; color: #d1d5db; line-height: 1.7; }
+        a { color: #22c55e; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .container { max-width: 780px; margin: 0 auto; padding: 40px 24px; }
+        nav { border-bottom: 1px solid #1f2937; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        nav .brand { color: #fff; font-weight: 700; font-size: 18px; }
+        nav .links a { margin-left: 20px; font-size: 14px; color: #9ca3af; }
+        h1 { color: #fff; font-size: 32px; margin: 40px 0 16px; line-height: 1.3; }
+        h2 { color: #fff; font-size: 22px; margin: 36px 0 12px; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+        h3 { color: #e5e7eb; font-size: 17px; margin: 24px 0 8px; }
+        p { margin: 12px 0; font-size: 15px; }
+        .meta { color: #6b7280; font-size: 13px; margin-bottom: 32px; }
+        pre { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; font-size: 13px; line-height: 1.5; }
+        code { font-family: 'SF Mono', Monaco, 'Consolas', monospace; color: #86efac; }
+        .inline-code { background: #1f2937; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+        .callout { background: #1f2937; border-left: 3px solid #22c55e; padding: 16px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+        .callout-warn { border-left-color: #f59e0b; }
+        .callout p { margin: 0; font-size: 14px; }
+        .cta { background: linear-gradient(135deg, #065f46, #064e3b); border: 1px solid #10b981; border-radius: 12px; padding: 24px; margin: 32px 0; text-align: center; }
+        .cta h3 { color: #fff; margin: 0 0 8px; }
+        .cta p { color: #9ca3af; font-size: 14px; margin: 0 0 16px; }
+        .cta a.btn { background: #22c55e; color: #000; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; text-decoration: none; }
+        .cta a.btn:hover { background: #16a34a; }
+        ul, ol { margin: 12px 0 12px 24px; font-size: 15px; }
+        li { margin: 6px 0; }
+        footer { border-top: 1px solid #1f2937; padding: 24px; text-align: center; color: #6b7280; font-size: 12px; margin-top: 60px; }
+        .toc { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 20px; margin: 24px 0; }
+        .toc h3 { margin: 0 0 12px; font-size: 14px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
+        .toc ol { margin: 0; padding-left: 20px; }
+        .toc li { margin: 4px 0; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" class="brand">SsysTech Softwares</a>
+        <div class="links">
+            <a href="https://zenhodl.net">ZenHodl</a>
+            <a href="https://zenhodl.net/docs">API Docs</a>
+            <a href="https://zenhodl.net/results">Live Results</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>How to Build a Polymarket Trading Bot in Python (2026 Guide)</h1>
+        <p class="meta">Published April 2026 &middot; 12 min read &middot; By SsysTech Softwares</p>
+
+        <p>Polymarket processes over $1 billion in monthly trading volume across sports, politics, and crypto events. The markets are liquid, 24/7, and increasingly driven by algorithmic traders. If you have a model that predicts outcomes better than the crowd, you can profit by trading against the market price.</p>
+
+        <p>This guide walks you through building an automated Polymarket trading bot in Python — from fetching market data to detecting edge to executing trades programmatically. We'll use real code, real API endpoints, and a real edge-detection strategy based on calibrated win probability models.</p>
+
+        <div class="toc">
+            <h3>Contents</h3>
+            <ol>
+                <li><a href="#prerequisites">Prerequisites &amp; Setup</a></li>
+                <li><a href="#market-data">Fetching Polymarket Data</a></li>
+                <li><a href="#fair-value">Computing Fair Value</a></li>
+                <li><a href="#edge-detection">Edge Detection Strategy</a></li>
+                <li><a href="#execution">Order Execution</a></li>
+                <li><a href="#risk">Risk Management</a></li>
+                <li><a href="#production">Going Live</a></li>
+            </ol>
+        </div>
+
+        <h2 id="prerequisites">1. Prerequisites &amp; Setup</h2>
+
+        <p>You'll need Python 3.10+, a Polymarket account with API access, and a fair-value model. For this tutorial, we'll use <a href="https://zenhodl.net">ZenHodl's prediction API</a> as the fair-value source — it provides calibrated win probabilities for 10 sports updated in real-time.</p>
+
+<pre><code># Install dependencies
+pip install requests websockets python-dotenv
+
+# .env file
+POLYMARKET_API_KEY=your_key_here
+ZENHODL_API_KEY=your_key_here</code></pre>
+
+<pre><code>import os
+import time
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+POLY_API = "https://clob.polymarket.com"
+ZENHODL_API = "https://zenhodl.net"
+ZENHODL_KEY = os.environ["ZENHODL_API_KEY"]</code></pre>
+
+        <h2 id="market-data">2. Fetching Polymarket Data</h2>
+
+        <p>Polymarket's CLOB (Central Limit Order Book) API provides real-time bid/ask prices for every market. For sports events, each game has two outcome tokens (home team and away team) priced between 0c and 100c.</p>
+
+<pre><code>def get_polymarket_price(token_id: str) -> dict:
+    """Fetch current bid/ask for a Polymarket token."""
+    resp = requests.get(
+        f"{POLY_API}/book",
+        params={"token_id": token_id},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    book = resp.json()
+
+    best_bid = float(book["bids"][0]["price"]) if book.get("bids") else 0
+    best_ask = float(book["asks"][0]["price"]) if book.get("asks") else 1
+    spread = best_ask - best_bid
+
+    return {
+        "bid": best_bid,
+        "ask": best_ask,
+        "spread": spread,
+        "mid": (best_bid + best_ask) / 2,
+    }</code></pre>
+
+        <div class="callout">
+            <p><strong>Key insight:</strong> The mid-price (average of bid and ask) is the market's implied probability. If the mid is 0.65, the market thinks the team has a 65% chance of winning. Your job is to find cases where your model disagrees with the market.</p>
+        </div>
+
+        <h2 id="fair-value">3. Computing Fair Value</h2>
+
+        <p>The core of any trading bot is the <strong>fair value model</strong> — your independent estimate of the true probability. You can build your own model (see our <a href="/">previous tutorial on building a sports prediction API</a>), or use a production-grade API like <a href="https://zenhodl.net/docs">ZenHodl</a>.</p>
+
+<pre><code>def get_fair_value(game_id: str) -> dict:
+    """Get calibrated fair probability from ZenHodl API."""
+    resp = requests.get(
+        f"{ZENHODL_API}/v1/games",
+        headers={"X-API-Key": ZENHODL_KEY},
+        params={"game_id": game_id},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    games = resp.json()
+
+    if not games:
+        return None
+
+    game = games[0]
+    return {
+        "home_team": game["home_team"],
+        "away_team": game["away_team"],
+        "home_wp": game["home_wp"],       # fair probability (0-1)
+        "away_wp": 1 - game["home_wp"],
+        "sport": game["sport"],
+        "status": game["status"],
+    }</code></pre>
+
+        <p>ZenHodl's predictions are calibrated using isotonic regression — when the model says 70%, the team actually wins ~70% of the time. This calibration accuracy is critical for trading: an uncalibrated model might say 70% when the real probability is 55%, causing you to overpay for every trade. See <a href="https://zenhodl.net/methodology">their methodology page</a> for details on how the models are trained and calibrated.</p>
+
+        <h2 id="edge-detection">4. Edge Detection Strategy</h2>
+
+        <p>Edge is the difference between your fair value and the market price. If your model says a team has a 72% chance but the market is selling at 65c, you have +7c of edge. The question is: how much edge do you need before it's worth trading?</p>
+
+<pre><code>def detect_edge(fair_wp: float, market_ask: float, min_edge: float = 0.08) -> dict:
+    """
+    Detect if there's tradeable edge.
+
+    Args:
+        fair_wp: Your model's probability (0-1)
+        market_ask: Current ask price on Polymarket (0-1)
+        min_edge: Minimum edge threshold (default 8%)
+
+    Returns:
+        dict with edge info, or None if no edge
+    """
+    edge = fair_wp - market_ask
+
+    if edge < min_edge:
+        return None
+
+    # Expected value per dollar wagered
+    ev = fair_wp * (1 - market_ask) - (1 - fair_wp) * market_ask
+
+    return {
+        "edge_c": round(edge * 100, 1),    # in cents
+        "ev_per_dollar": round(ev, 4),
+        "fair_wp": round(fair_wp, 3),
+        "market_ask": round(market_ask, 3),
+        "signal": "BUY",
+    }</code></pre>
+
+        <div class="callout callout-warn">
+            <p><strong>Warning:</strong> Small edges (under 5c) are usually noise, not signal. In our <a href="https://zenhodl.net/results">live trading results</a>, edges under 8c produced breakeven-or-worse returns. Only edges of 8c+ showed consistent profitability. Set your <code class="inline-code">min_edge</code> conservatively — it's better to miss a marginal trade than to take a losing one.</p>
+        </div>
+
+        <h2 id="execution">5. Order Execution</h2>
+
+        <p>Once you detect edge, the bot places a limit order on Polymarket's CLOB. We use a limit order (not market) to control slippage:</p>
+
+<pre><code>def place_order(token_id: str, side: str, price: float, size: float) -> dict:
+    """Place a limit order on Polymarket.
+
+    Args:
+        token_id: The outcome token to trade
+        side: "BUY" or "SELL"
+        price: Limit price (0-1)
+        size: Number of contracts
+    """
+    order = {
+        "tokenID": token_id,
+        "side": side,
+        "price": str(price),
+        "size": str(size),
+        "type": "GTC",  # Good-til-cancelled
+    }
+
+    resp = requests.post(
+        f"{POLY_API}/order",
+        json=order,
+        headers={
+            "Authorization": f"Bearer {os.environ['POLYMARKET_API_KEY']}",
+            "Content-Type": "application/json",
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()</code></pre>
+
+        <h2 id="risk">6. Risk Management</h2>
+
+        <p>Risk management is where most bots fail. Here are the three rules our production bots follow:</p>
+
+        <h3>Rule 1: Position sizing with fractional Kelly</h3>
+<pre><code>def kelly_size(fair_wp: float, market_price: float,
+               bankroll: float, kelly_fraction: float = 0.25) -> float:
+    """Half-Kelly position sizing.
+
+    Full Kelly maximizes long-run growth but has brutal drawdowns.
+    Quarter-Kelly (default) trades growth for stability.
+    """
+    p = fair_wp
+    q = 1 - p
+    b = (1 - market_price) / market_price  # odds
+
+    raw_kelly = (p * b - q) / b
+    if raw_kelly <= 0:
+        return 0
+
+    return bankroll * min(raw_kelly, 0.25) * kelly_fraction</code></pre>
+
+        <h3>Rule 2: Maximum exposure per game</h3>
+<pre><code># Never risk more than 5% of bankroll on one game
+MAX_GAME_EXPOSURE = 0.05
+
+# One position per game (no pyramiding)
+MAX_POSITIONS_PER_GAME = 1</code></pre>
+
+        <h3>Rule 3: Entry price filters</h3>
+<pre><code># Don't buy heavy favorites (>78c) — edge is too thin
+MAX_ENTRY_PRICE = 0.78
+
+# Don't buy extreme underdogs (<20c) — too risky
+MIN_ENTRY_PRICE = 0.20
+
+# Skip toss-ups (45-55c) — model has no edge here
+TOSS_UP_LOW = 0.45
+TOSS_UP_HIGH = 0.55</code></pre>
+
+        <div class="callout">
+            <p><strong>From our live trading data:</strong> The 20-42c entry range (underdogs) produced the best risk-adjusted returns. Heavy favorites (>70c) lost money despite >60% win rates because the upside per trade is too small to overcome the occasional loss. See the <a href="https://zenhodl.net/results">full breakdown on our results page</a>.</p>
+        </div>
+
+        <h2 id="production">7. Going Live</h2>
+
+        <p>Putting it all together into a production loop:</p>
+
+<pre><code>def run_bot(games: list, bankroll: float = 100.0):
+    """Main bot loop — scan games, detect edge, execute trades."""
+    for game in games:
+        # 1. Get fair value from prediction API
+        fair = get_fair_value(game["game_id"])
+        if not fair or fair["status"] != "live":
+            continue
+
+        # 2. Get market price from Polymarket
+        market = get_polymarket_price(game["home_token_id"])
+        if market["spread"] > 0.10:
+            continue  # Skip illiquid markets
+
+        # 3. Detect edge
+        edge = detect_edge(fair["home_wp"], market["ask"])
+        if not edge:
+            continue
+
+        # 4. Size the position
+        size = kelly_size(fair["home_wp"], market["ask"], bankroll)
+        if size < 1.0:
+            continue
+
+        # 5. Execute
+        print(f"TRADE: {fair['home_team']} | "
+              f"fair={fair['home_wp']:.0%} | "
+              f"market={market['ask']:.0%} | "
+              f"edge={edge['edge_c']}c | "
+              f"size=${size:.2f}")
+
+        place_order(
+            token_id=game["home_token_id"],
+            side="BUY",
+            price=market["ask"],
+            size=size,
+        )
+
+# Run every 60 seconds
+while True:
+    games = fetch_active_polymarket_games()
+    run_bot(games)
+    time.sleep(60)</code></pre>
+
+        <div class="cta">
+            <h3>Skip the model-building — use a production-grade API</h3>
+            <p>ZenHodl's prediction API provides calibrated win probabilities for 10 sports, updated in real-time. 335+ live trades with a 66% win rate on moneyline bots.</p>
+            <a href="https://zenhodl.net/pricing" class="btn">Start Free 7-Day Trial &rarr;</a>
+            <p style="margin-top: 12px;"><a href="https://zenhodl.net/docs" style="font-size: 13px;">Read the API docs</a> &middot; <a href="https://zenhodl.net/results" style="font-size: 13px;">See live results</a> &middot; <a href="https://zenhodl.net/launch" style="font-size: 13px;">Free bot-building course</a></p>
+        </div>
+
+        <h2>What's Next</h2>
+
+        <ul>
+            <li><strong>Add more sports:</strong> ZenHodl covers NBA, NFL, MLB, NHL, tennis, CS2, LoL, soccer, NCAAMB, and NCAAWB. Each sport has different edge characteristics.</li>
+            <li><strong>Monitor calibration drift:</strong> Models degrade over time. Use a rolling calibration check (isotonic refit every 500 predictions) to keep your fair values accurate.</li>
+            <li><strong>Track your P&L:</strong> Log every trade to a JSONL ledger. Audit weekly by sport, edge bucket, and entry price range to find what's working and what's bleeding.</li>
+            <li><strong>Add injury overlays:</strong> Player injuries shift win probabilities by 5-15%. Real-time injury data from ESPN can give you an edge before the market adjusts.</li>
+        </ul>
+
+        <p>The complete code from this tutorial is available as a starting point. For a more comprehensive walkthrough (6 Jupyter notebooks from data collection to live deployment), check out the <a href="https://zenhodl.net/launch">free prediction bot course</a>.</p>
+
+        <hr style="border-color: #1f2937; margin: 40px 0;">
+
+        <p style="font-size: 13px; color: #6b7280;"><em>Disclosure: This tutorial references <a href="https://zenhodl.net">ZenHodl</a>, a sports prediction API. Trading on prediction markets involves risk. Past performance of any model or bot does not guarantee future results. Always trade with money you can afford to lose.</em></p>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 SsysTech Softwares &middot; <a href="https://zenhodl.net">ZenHodl Sports Prediction API</a></p>
+    </footer>
+</body>
+</html>
