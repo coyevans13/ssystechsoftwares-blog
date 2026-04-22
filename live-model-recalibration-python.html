@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Model Recalibration in Python: Fixing ML Drift in Production | SsysTech Softwares</title>
+    <meta name="description" content="How to detect and fix calibration drift in production ML models using rolling isotonic regression. Python code for online recalibration with real-world examples from sports prediction models.">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://ssystechsoftwares.com/live-model-recalibration-python">
+    <meta property="og:title" content="Live Model Recalibration: Fixing ML Drift in Production">
+    <meta property="og:description" content="A practical guide to detecting and correcting miscalibration in production ML models without retraining from scratch.">
+    <meta property="og:type" content="article">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0f1a; color: #d1d5db; line-height: 1.7; }
+        a { color: #22c55e; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .container { max-width: 780px; margin: 0 auto; padding: 40px 24px; }
+        nav { border-bottom: 1px solid #1f2937; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        nav .brand { color: #fff; font-weight: 700; font-size: 18px; }
+        nav .links a { margin-left: 20px; font-size: 14px; color: #9ca3af; }
+        h1 { color: #fff; font-size: 32px; margin: 40px 0 16px; line-height: 1.3; }
+        h2 { color: #fff; font-size: 22px; margin: 36px 0 12px; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+        h3 { color: #e5e7eb; font-size: 17px; margin: 24px 0 8px; }
+        p { margin: 12px 0; font-size: 15px; }
+        .meta { color: #6b7280; font-size: 13px; margin-bottom: 32px; }
+        pre { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; font-size: 13px; line-height: 1.5; }
+        code { font-family: 'SF Mono', Monaco, 'Consolas', monospace; color: #86efac; }
+        .inline-code { background: #1f2937; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+        .callout { background: #1f2937; border-left: 3px solid #22c55e; padding: 16px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+        .callout-warn { border-left-color: #f59e0b; }
+        .callout p { margin: 0; font-size: 14px; }
+        .cta { background: linear-gradient(135deg, #065f46, #064e3b); border: 1px solid #10b981; border-radius: 12px; padding: 24px; margin: 32px 0; text-align: center; }
+        .cta h3 { color: #fff; margin: 0 0 8px; }
+        .cta p { color: #9ca3af; font-size: 14px; margin: 0 0 16px; }
+        .cta a.btn { background: #22c55e; color: #000; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; text-decoration: none; }
+        .cta a.btn:hover { background: #16a34a; }
+        ul, ol { margin: 12px 0 12px 24px; font-size: 15px; }
+        li { margin: 6px 0; }
+        footer { border-top: 1px solid #1f2937; padding: 24px; text-align: center; color: #6b7280; font-size: 12px; margin-top: 60px; }
+        .toc { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 20px; margin: 24px 0; }
+        .toc h3 { margin: 0 0 12px; font-size: 14px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
+        .toc ol { margin: 0; padding-left: 20px; }
+        .toc li { margin: 4px 0; font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1f2937; }
+        th { color: #9ca3af; font-weight: 600; text-transform: uppercase; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" class="brand">SsysTech Softwares</a>
+        <div class="links">
+            <a href="https://zenhodl.net">ZenHodl</a>
+            <a href="https://zenhodl.net/docs">API Docs</a>
+            <a href="https://zenhodl.net/results">Live Results</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Live Model Recalibration in Python: Fixing ML Drift in Production</h1>
+        <p class="meta">Published April 2026 &middot; 14 min read &middot; By SsysTech Softwares</p>
+
+        <p>Your XGBoost classifier scores 1.8% Expected Calibration Error on the held-out test set. Six weeks into production, the same model is posting 21% ECE on live data. The model didn't change. The world did.</p>
+
+        <p>This is calibration drift — one of the most expensive silent failures in production machine learning. The model still returns a number between 0 and 1, predictions still correlate with outcomes, but <strong>the probabilities no longer match reality</strong>. If you're using those probabilities to make capital-allocation decisions — trading bots, credit scoring, ad auctions, insurance pricing — you're bleeding money at the tails.</p>
+
+        <p>This post covers how to detect drift quickly, apply online recalibration without a full retrain, and keep your model aligned with live distributions. All code is Python 3.10+, scikit-learn, and pandas.</p>
+
+        <div class="toc">
+            <h3>Contents</h3>
+            <ol>
+                <li><a href="#what-is-drift">What calibration drift looks like</a></li>
+                <li><a href="#measure">Measuring drift with ECE and reliability diagrams</a></li>
+                <li><a href="#buffer">Building a rolling recalibration buffer</a></li>
+                <li><a href="#isotonic">Fitting rolling isotonic regression</a></li>
+                <li><a href="#apply">Applying the calibrator at inference time</a></li>
+                <li><a href="#thresholds">When to retrain instead of recalibrate</a></li>
+                <li><a href="#production">Production checklist</a></li>
+            </ol>
+        </div>
+
+        <h2 id="what-is-drift">1. What calibration drift looks like</h2>
+
+        <p>A well-calibrated classifier satisfies the property that among all instances where the model says "70% probability," roughly 70% actually happen. When drift occurs, the mapping breaks. Typical patterns:</p>
+
+        <ul>
+            <li><strong>Overconfidence at the tails.</strong> Model says 85%, reality is 62%.</li>
+            <li><strong>Underconfidence in the middle.</strong> Model says 50%, reality is 60%.</li>
+            <li><strong>Regime-specific bias.</strong> Calibrated in regular-season games, miscalibrated in playoffs.</li>
+        </ul>
+
+        <p>The core problem is that the feature distribution during inference has drifted from training. Your model learned P(outcome | features) under training's feature distribution. When feature distributions change — rule changes, seasonality, roster changes in sports, macro regime shifts in finance — the conditional relationship changes too.</p>
+
+        <div class="callout">
+            <p><strong>Real example:</strong> In one of our sports win-probability models, training ECE was 0.2%. Six weeks into live trading, ECE measured across ~500 real trades was 21%. The 80-90% confidence bucket showed 44% actual wins versus 85% predicted.</p>
+        </div>
+
+        <h2 id="measure">2. Measuring drift with ECE and reliability diagrams</h2>
+
+        <p>Before you can fix drift you need to quantify it. Two tools:</p>
+
+        <h3>Expected Calibration Error (ECE)</h3>
+
+        <p>Bin predictions into N buckets (10 is standard). In each bucket, compare average predicted probability to average actual outcome. ECE is the weighted average of those differences.</p>
+
+<pre><code>import numpy as np
+
+def expected_calibration_error(y_true: np.ndarray,
+                                y_proba: np.ndarray,
+                                n_bins: int = 10) -> float:
+    """
+    Expected Calibration Error with equal-width bins.
+
+    ECE = sum over bins of (n_bin / N) * |mean_pred - mean_actual|
+
+    Returns a scalar in [0, 1]. Lower is better.
+    """
+    edges = np.linspace(0, 1, n_bins + 1)
+    n = len(y_true)
+    ece = 0.0
+    for i in range(n_bins):
+        mask = (y_proba &gt;= edges[i]) &amp; (y_proba &lt; edges[i + 1])
+        if mask.sum() == 0:
+            continue
+        bin_pred = y_proba[mask].mean()
+        bin_actual = y_true[mask].mean()
+        ece += (mask.sum() / n) * abs(bin_pred - bin_actual)
+    return float(ece)
+
+# Example
+ece = expected_calibration_error(y_live, p_live, n_bins=10)
+print(f"Live ECE: {ece * 100:.2f}%")
+</code></pre>
+
+        <h3>Reliability diagram</h3>
+
+        <p>ECE is one number. The reliability diagram tells you <em>where</em> the drift is concentrated.</p>
+
+<pre><code>def reliability_diagram(y_true, y_proba, n_bins=10):
+    edges = np.linspace(0, 1, n_bins + 1)
+    print(f"{'Bucket':&lt;10}{'N':&gt;6}{'Predicted':&gt;12}{'Actual':&gt;10}{'Gap':&gt;8}")
+    for i in range(n_bins):
+        mask = (y_proba &gt;= edges[i]) &amp; (y_proba &lt; edges[i + 1])
+        c = int(mask.sum())
+        if c &lt; 10:
+            continue
+        ap = y_proba[mask].mean() * 100
+        at = y_true[mask].mean() * 100
+        diff = ap - at
+        flag = "  &lt;--- overconfident" if diff &gt; 15 else ""
+        bucket = f"{int(edges[i]*100)}-{int(edges[i+1]*100)}%"
+        print(f"{bucket:&lt;10}{c:&gt;6}{ap:&gt;11.1f}%{at:&gt;9.1f}%{diff:&gt;+7.1f}{flag}")
+</code></pre>
+
+        <p>A healthy reliability diagram has all buckets within 3-5 percentage points of the diagonal. Anything worse than 10pp in a bucket where you size positions heavily is expensive.</p>
+
+        <h2 id="buffer">3. Building a rolling recalibration buffer</h2>
+
+        <p>The strategy: keep the base model frozen, fit a post-hoc calibrator on recent (prediction, outcome) pairs, and update the calibrator continuously as new outcomes arrive.</p>
+
+        <p>Start with a simple append-only buffer on disk. For sports prediction we use JSONL:</p>
+
+<pre><code>import json
+import time
+from pathlib import Path
+from typing import Optional
+
+class RecalibrationBuffer:
+    """Append-only buffer of (prediction, outcome) pairs per sport."""
+
+    def __init__(self, path: Path, max_entries: int = 10_000):
+        self.path = path
+        self.max_entries = max_entries
+
+    def record(self, sport: str, prediction: float, outcome: int,
+               ts: Optional[float] = None) -> None:
+        """Called at outcome resolution. Never blocks the request path."""
+        entry = {
+            "sport": sport,
+            "pred": float(prediction),
+            "outcome": int(outcome),
+            "ts": ts or time.time(),
+        }
+        with open(self.path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+
+    def load_recent(self, sport: str, n: int = 500):
+        """Return last n (pred, outcome) pairs for this sport."""
+        if not self.path.exists():
+            return [], []
+        preds, outcomes = [], []
+        with open(self.path) as f:
+            for line in f:
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                if e.get("sport") != sport:
+                    continue
+                preds.append(e["pred"])
+                outcomes.append(e["outcome"])
+        return preds[-n:], outcomes[-n:]
+</code></pre>
+
+        <div class="callout callout-warn">
+            <p><strong>Record on resolution, not prediction.</strong> If you record at prediction time with a "pending" outcome, you need a reliable backfill path when the outcome arrives. Simpler: only append when the outcome is known.</p>
+        </div>
+
+        <h2 id="isotonic">4. Fitting rolling isotonic regression</h2>
+
+        <p>Isotonic regression is the right calibrator for most drift scenarios. It's non-parametric (fits any monotonic mapping), uses no distributional assumptions, and handles small sample sizes gracefully.</p>
+
+<pre><code>from sklearn.isotonic import IsotonicRegression
+from typing import Dict
+import numpy as np
+
+class LiveRecalibrator:
+    """Per-sport isotonic regression that refits periodically from a buffer."""
+
+    def __init__(self,
+                 buffer: RecalibrationBuffer,
+                 window: int = 500,
+                 min_samples: int = 50,
+                 refit_every_n: int = 10):
+        self.buffer = buffer
+        self.window = window
+        self.min_samples = min_samples
+        self.refit_every_n = refit_every_n
+        self._models: Dict[str, IsotonicRegression] = {}
+        self._fit_count: Dict[str, int] = {}
+
+    def _refit(self, sport: str) -> None:
+        preds, outcomes = self.buffer.load_recent(sport, n=self.window)
+        if len(preds) &lt; self.min_samples:
+            return
+        iso = IsotonicRegression(y_min=0.01, y_max=0.99, out_of_bounds="clip")
+        iso.fit(np.asarray(preds), np.asarray(outcomes))
+        self._models[sport] = iso
+
+    def record_and_maybe_refit(self, sport: str, pred: float, outcome: int):
+        self.buffer.record(sport, pred, outcome)
+        count = self._fit_count.get(sport, 0) + 1
+        self._fit_count[sport] = count
+        if count % self.refit_every_n == 0:
+            self._refit(sport)
+
+    def adjust(self, sport: str, raw_pred: float) -> float:
+        """Apply current calibrator. Returns raw_pred unchanged if no fit yet."""
+        iso = self._models.get(sport)
+        if iso is None:
+            return raw_pred
+        return float(iso.predict([raw_pred])[0])
+</code></pre>
+
+        <p>Key design decisions in this class:</p>
+
+        <ul>
+            <li><strong>Per-sport calibrators.</strong> NBA drift and NHL drift aren't the same event. Sharing a calibrator between them loses signal.</li>
+            <li><strong>Rolling window of 500 samples.</strong> Large enough for stable isotonic fits; small enough to drop stale data within weeks.</li>
+            <li><strong>Refit every 10 records.</strong> Cheaper than refitting on every prediction. Adjustable.</li>
+            <li><strong>Fallback to raw prediction.</strong> If you have fewer than 50 samples in the window, trust the base model rather than a noisy calibrator.</li>
+        </ul>
+
+        <h2 id="apply">5. Applying the calibrator at inference time</h2>
+
+        <p>In the prediction path, apply the calibrator as the last step before returning the probability to callers:</p>
+
+<pre><code>def predict_wp(sport: str, features: np.ndarray) -> float:
+    raw_pred = float(base_model.predict_proba(features)[0, 1])
+    calibrated = recalibrator.adjust(sport, raw_pred)
+    return calibrated
+
+# In the outcome-resolution worker:
+def on_game_resolved(sport: str, prediction: float, outcome: int):
+    recalibrator.record_and_maybe_refit(sport, prediction, outcome)
+</code></pre>
+
+        <p>Two inference paths in one codebase — one computes and calibrates, the other records outcomes. They share the buffer. If the recalibrator misbehaves, the prediction path never breaks:</p>
+
+<pre><code>def predict_wp_safe(sport: str, features: np.ndarray) -> float:
+    raw_pred = float(base_model.predict_proba(features)[0, 1])
+    try:
+        return recalibrator.adjust(sport, raw_pred)
+    except Exception:
+        logger.exception("Recalibrator failed, returning raw prediction")
+        return raw_pred
+</code></pre>
+
+        <h2 id="thresholds">6. When to retrain instead of recalibrate</h2>
+
+        <p>Online recalibration fixes <em>calibration</em> but not <em>discrimination</em>. If your model's AUC is dropping, you don't have a calibration problem — you have a model problem. Retrain.</p>
+
+        <table>
+            <tr><th>Symptom</th><th>Fix</th></tr>
+            <tr><td>ECE rising, AUC stable</td><td>Online recalibration</td></tr>
+            <tr><td>AUC dropping, ECE rising</td><td>Retrain on recent data</td></tr>
+            <tr><td>Structural break (regime change)</td><td>Retrain + add regime features</td></tr>
+            <tr><td>Data source changed upstream</td><td>Investigate data, likely retrain</td></tr>
+        </table>
+
+        <p>Track both metrics weekly. Recalibration is a bandage over a gradually-shifting distribution; retraining replaces the bandage with a new bone structure.</p>
+
+        <h2 id="production">7. Production checklist</h2>
+
+        <ul>
+            <li>✅ Buffer writes are idempotent (record-once per outcome)</li>
+            <li>✅ Refit runs off the hot path (cron, background worker, or periodic async task)</li>
+            <li>✅ Calibrator failure mode: return raw prediction, log, alert</li>
+            <li>✅ Per-sport / per-segment calibrators for meaningful subpopulations</li>
+            <li>✅ Weekly reliability-diagram snapshot for human review</li>
+            <li>✅ Alert when ECE exceeds threshold (say, 8%)</li>
+            <li>✅ Calibrator versioning: which window produced the current mapping?</li>
+            <li>✅ Retrain trigger documented: when does recalibration stop being enough?</li>
+        </ul>
+
+        <div class="cta">
+            <h3>Want calibrated sports probabilities without the infrastructure work?</h3>
+            <p>ZenHodl runs rolling isotonic recalibrators for 11 sports in production. Access calibrated win probabilities, edge detection signals, and verified live P&amp;L via a simple REST API — no data pipeline required.</p>
+            <a href="https://zenhodl.net" class="btn">See ZenHodl's live API</a>
+        </div>
+
+        <p class="meta">Further reading: <a href="/polymarket-trading-bot-python.html">How to Build a Polymarket Trading Bot in Python</a></p>
+    </div>
+
+    <footer>
+        SsysTech Softwares &middot; Technical writing on Python, ML, and APIs for quantitative systems
+    </footer>
+</body>
+</html>

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Sports Data Pipelines: ESPN, Polymarket &amp; WebSockets Architecture | SsysTech Softwares</title>
+    <meta name="description" content="Design of a production sports data pipeline: ESPN scoreboard polling, Polymarket WebSocket price feeds, FastAPI serving layer. Includes Python code, failure modes, and latency tuning for real-time trading systems.">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://ssystechsoftwares.com/real-time-sports-data-pipeline-architecture">
+    <meta property="og:title" content="Real-Time Sports Data Pipelines: ESPN + Polymarket + WebSockets Architecture">
+    <meta property="og:description" content="How to build a production sports data pipeline that merges live scoreboard state with prediction-market prices at sub-second latency.">
+    <meta property="og:type" content="article">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0f1a; color: #d1d5db; line-height: 1.7; }
+        a { color: #22c55e; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .container { max-width: 780px; margin: 0 auto; padding: 40px 24px; }
+        nav { border-bottom: 1px solid #1f2937; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        nav .brand { color: #fff; font-weight: 700; font-size: 18px; }
+        nav .links a { margin-left: 20px; font-size: 14px; color: #9ca3af; }
+        h1 { color: #fff; font-size: 32px; margin: 40px 0 16px; line-height: 1.3; }
+        h2 { color: #fff; font-size: 22px; margin: 36px 0 12px; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+        h3 { color: #e5e7eb; font-size: 17px; margin: 24px 0 8px; }
+        p { margin: 12px 0; font-size: 15px; }
+        .meta { color: #6b7280; font-size: 13px; margin-bottom: 32px; }
+        pre { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; font-size: 13px; line-height: 1.5; }
+        code { font-family: 'SF Mono', Monaco, 'Consolas', monospace; color: #86efac; }
+        .inline-code { background: #1f2937; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+        .callout { background: #1f2937; border-left: 3px solid #22c55e; padding: 16px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+        .callout-warn { border-left-color: #f59e0b; }
+        .callout p { margin: 0; font-size: 14px; }
+        .cta { background: linear-gradient(135deg, #065f46, #064e3b); border: 1px solid #10b981; border-radius: 12px; padding: 24px; margin: 32px 0; text-align: center; }
+        .cta h3 { color: #fff; margin: 0 0 8px; }
+        .cta p { color: #9ca3af; font-size: 14px; margin: 0 0 16px; }
+        .cta a.btn { background: #22c55e; color: #000; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; text-decoration: none; }
+        .cta a.btn:hover { background: #16a34a; }
+        ul, ol { margin: 12px 0 12px 24px; font-size: 15px; }
+        li { margin: 6px 0; }
+        footer { border-top: 1px solid #1f2937; padding: 24px; text-align: center; color: #6b7280; font-size: 12px; margin-top: 60px; }
+        .toc { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 20px; margin: 24px 0; }
+        .toc h3 { margin: 0 0 12px; font-size: 14px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
+        .toc ol { margin: 0; padding-left: 20px; }
+        .toc li { margin: 4px 0; font-size: 14px; }
+        .diagram { background: #0d1117; border: 1px solid #1f2937; border-radius: 8px; padding: 20px; margin: 20px 0; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; color: #9ca3af; white-space: pre; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1f2937; }
+        th { color: #9ca3af; font-weight: 600; text-transform: uppercase; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" class="brand">SsysTech Softwares</a>
+        <div class="links">
+            <a href="https://zenhodl.net">ZenHodl</a>
+            <a href="https://zenhodl.net/docs">API Docs</a>
+            <a href="https://zenhodl.net/results">Live Results</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Real-Time Sports Data Pipelines: ESPN, Polymarket &amp; WebSockets Architecture</h1>
+        <p class="meta">Published April 2026 &middot; 16 min read &middot; By SsysTech Softwares</p>
+
+        <p>You want your model to see a score change, run inference, compare to Polymarket's current ask, and either signal or skip — all within one second. Building this requires merging two asynchronous streams (game state from ESPN; market prices from Polymarket), handling failures gracefully, and minimizing latency end-to-end.</p>
+
+        <p>This post walks through a production architecture in Python: what to poll, what to stream over WebSocket, how to fuse the streams, where to store state, and how to expose the merged signal via FastAPI. It's based on the pipeline that powers a production sports prediction system serving calibrated probabilities for 11 sports.</p>
+
+        <div class="toc">
+            <h3>Contents</h3>
+            <ol>
+                <li><a href="#overview">Architecture overview</a></li>
+                <li><a href="#espn">ESPN scoreboard polling</a></li>
+                <li><a href="#polymarket">Polymarket WebSocket subscription</a></li>
+                <li><a href="#fusion">Fusing streams into a signal</a></li>
+                <li><a href="#fastapi">Serving via FastAPI</a></li>
+                <li><a href="#resilience">Failure modes &amp; resilience</a></li>
+                <li><a href="#latency">Measuring end-to-end latency</a></li>
+            </ol>
+        </div>
+
+        <h2 id="overview">1. Architecture overview</h2>
+
+        <p>High-level flow:</p>
+
+        <div class="diagram">ESPN API (HTTPS)                       Polymarket CLOB (WebSocket)
+   |                                      |
+   v  poll every 5s                       v  push on book change
+┌──────────────┐                       ┌──────────────────┐
+│ Game tracker │                       │ Book tracker     │
+│ (state dict) │                       │ (top-of-book dict)│
+└──────┬───────┘                       └──────┬───────────┘
+       │   score change                       │ price change
+       └──────────────┬──────────────────────┘
+                      v
+              ┌──────────────┐
+              │ Signal fuser │  &lt;-- ML model inference here
+              └──────┬───────┘
+                     │ edge &gt; threshold
+                     v
+              ┌──────────────┐
+              │  FastAPI /   │  &lt;-- trader or webhook subscribes
+              │  webhook     │
+              └──────────────┘</div>
+
+        <p>Two independent async tasks feed a fusion layer. The fusion layer runs model inference when either stream changes, computes edge, and emits signals downstream. FastAPI serves both client queries and internal webhooks.</p>
+
+        <h2 id="espn">2. ESPN scoreboard polling</h2>
+
+        <p>ESPN's public site API returns a full scoreboard per sport at endpoints like <span class="inline-code">site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard</span>. It's not WebSocket, so you poll. The trick: poll fast for in-progress games, slow otherwise, and detect score changes with minimal parsing overhead.</p>
+
+<pre><code>import asyncio
+import aiohttp
+from typing import Dict, Optional
+from dataclasses import dataclass, field
+
+@dataclass
+class GameState:
+    game_id: str
+    home: str
+    away: str
+    home_score: int
+    away_score: int
+    period: int
+    clock_remaining_s: float
+    is_live: bool
+    last_update_ts: float = 0.0
+
+
+class ESPNTracker:
+    """Polls ESPN scoreboard. Fires callbacks on score changes."""
+
+    SPORT_URLS = {
+        "NBA":    "basketball/nba",
+        "NHL":    "hockey/nhl",
+        "MLB":    "baseball/mlb",
+        "NCAAMB": "basketball/mens-college-basketball",
+    }
+
+    def __init__(self, sports: list[str], fast_s: float = 5.0, slow_s: float = 15.0):
+        self.sports = sports
+        self.fast_s = fast_s
+        self.slow_s = slow_s
+        self.games: Dict[str, GameState] = {}
+        self._on_change = []
+
+    def on_score_change(self, cb):
+        self._on_change.append(cb)
+
+    async def run(self):
+        async with aiohttp.ClientSession() as session:
+            while True:
+                live_count = 0
+                for sport in self.sports:
+                    try:
+                        live_count += await self._poll_sport(session, sport)
+                    except Exception as e:
+                        logger.warning(f"ESPN poll failed for {sport}: {e}")
+                interval = self.fast_s if live_count &gt; 0 else self.slow_s
+                await asyncio.sleep(interval)
+
+    async def _poll_sport(self, session, sport: str) -> int:
+        path = self.SPORT_URLS[sport]
+        url = f"https://site.api.espn.com/apis/site/v2/sports/{path}/scoreboard"
+        async with session.get(url, timeout=8) as resp:
+            data = await resp.json()
+
+        live = 0
+        for ev in data.get("events", []):
+            gs = self._parse_event(ev, sport)
+            if gs is None:
+                continue
+            prev = self.games.get(gs.game_id)
+            self.games[gs.game_id] = gs
+            if gs.is_live:
+                live += 1
+                if prev is None or prev.home_score != gs.home_score or prev.away_score != gs.away_score:
+                    for cb in self._on_change:
+                        cb(prev, gs)
+        return live
+</code></pre>
+
+        <div class="callout callout-warn">
+            <p><strong>Rate limiting:</strong> ESPN doesn't publish rate limits, but sustained polling faster than every 2-3s per sport will eventually trigger soft-throttling (slower responses). Target 5s intervals when games are live; 15-30s between polls when quiet.</p>
+        </div>
+
+        <h2 id="polymarket">3. Polymarket WebSocket subscription</h2>
+
+        <p>Polymarket's CLOB supports WebSocket subscriptions on specific token IDs. You send a subscribe message with a list of tokens, receive book updates as they change. This is real-time; latency is typically 50-150ms from price change to push.</p>
+
+<pre><code>import json
+import websockets
+from typing import Callable, List
+
+class PolymarketBookTracker:
+    """Subscribes to Polymarket CLOB book updates for a set of tokens."""
+
+    WS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+
+    def __init__(self, tokens: List[str]):
+        self.tokens = tokens
+        self.book: dict = {}   # token_id -> {"bid": float, "ask": float, "ts": float}
+        self._on_update: List[Callable] = []
+
+    def on_book_update(self, cb):
+        self._on_update.append(cb)
+
+    async def run(self):
+        while True:
+            try:
+                async with websockets.connect(self.WS_URL, ping_interval=20) as ws:
+                    await ws.send(json.dumps({
+                        "type": "MARKET",
+                        "assets_ids": self.tokens,
+                    }))
+                    async for msg in ws:
+                        self._handle_msg(msg)
+            except (websockets.ConnectionClosed, asyncio.TimeoutError) as e:
+                logger.warning(f"Polymarket WS dropped: {e} — reconnecting in 5s")
+                await asyncio.sleep(5)
+
+    def _handle_msg(self, msg: str):
+        try:
+            events = json.loads(msg)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(events, list):
+            events = [events]
+        for ev in events:
+            if ev.get("event_type") != "book":
+                continue
+            token_id = ev.get("asset_id")
+            bids = ev.get("bids", [])
+            asks = ev.get("asks", [])
+            best_bid = max(float(b["price"]) for b in bids) if bids else 0.0
+            best_ask = min(float(a["price"]) for a in asks) if asks else 1.0
+            self.book[token_id] = {
+                "bid": best_bid,
+                "ask": best_ask,
+                "ts": time.time(),
+            }
+            for cb in self._on_update:
+                cb(token_id, self.book[token_id])
+</code></pre>
+
+        <h2 id="fusion">4. Fusing streams into a signal</h2>
+
+        <p>Both trackers call a fusion layer on changes. The fusion layer looks up the current state from <em>both</em> streams, runs inference, computes edge, and emits signals.</p>
+
+<pre><code>from typing import Optional
+
+class SignalFuser:
+    def __init__(self, espn: ESPNTracker, book: PolymarketBookTracker,
+                 model, token_to_game: dict, min_edge_c: float = 5.0):
+        self.espn = espn
+        self.book = book
+        self.model = model
+        self.token_to_game = token_to_game  # token_id -&gt; (game_id, side)
+        self.min_edge_c = min_edge_c
+
+        # Wire up change callbacks
+        espn.on_score_change(self._on_score_change)
+        book.on_book_update(self._on_book_update)
+
+    def _on_score_change(self, prev: Optional[GameState], new: GameState):
+        # For each token covering this game, re-evaluate
+        for token_id, (game_id, side) in self.token_to_game.items():
+            if game_id == new.game_id:
+                self._evaluate(token_id, new)
+
+    def _on_book_update(self, token_id: str, book_state: dict):
+        game_id, _side = self.token_to_game.get(token_id, (None, None))
+        if not game_id:
+            return
+        game_state = self.espn.games.get(game_id)
+        if game_state is None or not game_state.is_live:
+            return
+        self._evaluate(token_id, game_state)
+
+    def _evaluate(self, token_id: str, game_state: GameState):
+        book_state = self.book.book.get(token_id)
+        if not book_state:
+            return
+        ask_c = book_state["ask"] * 100
+        side = self.token_to_game[token_id][1]
+        fair_wp = self.model.predict_wp(game_state, side)
+        fair_c = fair_wp * 100
+        edge_c = fair_c - ask_c
+        if edge_c &lt; self.min_edge_c:
+            return
+        self._emit(token_id, game_state, book_state, fair_c, edge_c)
+
+    def _emit(self, token_id, game_state, book_state, fair_c, edge_c):
+        signal = {
+            "ts": time.time(),
+            "game_id": game_state.game_id,
+            "token_id": token_id,
+            "fair_c": fair_c,
+            "ask_c": book_state["ask"] * 100,
+            "edge_c": edge_c,
+            "score": f"{game_state.home_score}-{game_state.away_score}",
+        }
+        logger.info(f"SIGNAL {signal}")
+        # Push to queue, webhook, Redis, etc.
+</code></pre>
+
+        <h2 id="fastapi">5. Serving via FastAPI</h2>
+
+        <p>Expose the merged state and signals via FastAPI so downstream consumers (trading bots, dashboards, clients) can subscribe:</p>
+
+<pre><code>from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+import asyncio
+
+app = FastAPI()
+
+@app.get("/v1/state/{game_id}")
+async def get_state(game_id: str):
+    g = espn_tracker.games.get(game_id)
+    if not g:
+        return {"error": "not found"}, 404
+    return {
+        "game_id": g.game_id,
+        "home": g.home, "away": g.away,
+        "home_score": g.home_score, "away_score": g.away_score,
+        "is_live": g.is_live,
+        "last_update_ts": g.last_update_ts,
+    }
+
+@app.get("/v1/signals/stream")
+async def stream_signals():
+    """Server-sent events: push signals to subscribers as they occur."""
+    async def gen():
+        queue = asyncio.Queue()
+        signal_fuser.subscribe(queue.put_nowait)
+        try:
+            while True:
+                sig = await queue.get()
+                yield f"data: {json.dumps(sig)}\n\n"
+        finally:
+            signal_fuser.unsubscribe(queue.put_nowait)
+    return StreamingResponse(gen(), media_type="text/event-stream")
+</code></pre>
+
+        <h2 id="resilience">6. Failure modes &amp; resilience</h2>
+
+        <p>Every real-time pipeline has the same three failure modes: upstream goes silent, downstream falls behind, state desyncs between streams. Each needs a deliberate response.</p>
+
+        <table>
+            <tr><th>Failure mode</th><th>Mitigation</th></tr>
+            <tr><td>ESPN returns 5xx or times out</td><td>Retry with exponential backoff; continue with stale state tagged with age</td></tr>
+            <tr><td>Polymarket WS drops</td><td>Reconnect, re-subscribe, fall back to REST polling for critical tokens</td></tr>
+            <tr><td>Score-change arrives but token book is stale &gt; 30s</td><td>Skip evaluation; log as stale-book warning</td></tr>
+            <tr><td>Model inference throws</td><td>Log, increment counter, keep pipeline alive — never crash on model errors</td></tr>
+            <tr><td>Signal queue backpressure</td><td>Drop oldest signals rather than block producers</td></tr>
+        </table>
+
+        <p>The single most important resilience pattern: <strong>tag every state snapshot with its timestamp</strong>. Consumers can then decide for themselves whether the data is fresh enough to act on.</p>
+
+<pre><code>def is_book_fresh(book_state: dict, max_age_s: float = 5.0) -&gt; bool:
+    return (time.time() - book_state.get("ts", 0)) &lt; max_age_s
+
+def is_game_fresh(game_state: GameState, max_age_s: float = 30.0) -&gt; bool:
+    return (time.time() - game_state.last_update_ts) &lt; max_age_s
+</code></pre>
+
+        <h2 id="latency">7. Measuring end-to-end latency</h2>
+
+        <p>If you're trading on these signals, latency is money. Instrument the pipeline end-to-end:</p>
+
+<pre><code>import time
+
+def evaluate_with_latency(...):
+    t0 = time.perf_counter()
+    # inference
+    t1 = time.perf_counter()
+    # edge compute
+    t2 = time.perf_counter()
+    # signal emit
+    t3 = time.perf_counter()
+    logger.info(
+        f"LAT | inference={(t1-t0)*1000:.1f}ms "
+        f"edge={(t2-t1)*1000:.1f}ms "
+        f"emit={(t3-t2)*1000:.1f}ms "
+        f"total={(t3-t0)*1000:.1f}ms"
+    )
+</code></pre>
+
+        <p>Target latencies in a healthy system:</p>
+
+        <ul>
+            <li>Score-change detection: 100-500ms after it happens on ESPN</li>
+            <li>Book update: 50-150ms after market moves</li>
+            <li>Inference: 1-5ms for XGBoost on CPU</li>
+            <li>Total: score change → signal delivery under 600ms</li>
+        </ul>
+
+        <div class="callout">
+            <p><strong>The real limit:</strong> ESPN poll interval. You can't react to a score before the next ESPN poll. At 5s intervals you have up to 5s of "score already changed but we don't know yet." Faster polling helps but hits rate limits. Acceptable tradeoff depends on your trading horizon.</p>
+        </div>
+
+        <div class="cta">
+            <h3>Don't build this. Subscribe to the merged feed.</h3>
+            <p>ZenHodl runs this exact pipeline for 11 sports in production. You get the fused signal (ESPN state + Polymarket book + calibrated WP) via a single REST or WebSocket API — no infrastructure to operate.</p>
+            <a href="https://zenhodl.net/docs" class="btn">See the API docs</a>
+        </div>
+
+        <p class="meta">Further reading: <a href="/live-model-recalibration-python.html">Live Model Recalibration</a> &middot; <a href="/backtesting-pitfalls-trading-strategy.html">Backtesting Pitfalls</a> &middot; <a href="/polymarket-trading-bot-python.html">How to Build a Polymarket Trading Bot in Python</a></p>
+    </div>
+
+    <footer>
+        SsysTech Softwares &middot; Technical writing on Python, ML, and APIs for quantitative systems
+    </footer>
+</body>
+</html>

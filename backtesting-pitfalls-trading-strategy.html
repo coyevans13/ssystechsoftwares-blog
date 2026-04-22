@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backtesting Pitfalls: 5 Ways Your Trading Strategy Leaks Future Data | SsysTech Softwares</title>
+    <meta name="description" content="The backtest printed a 2.3 Sharpe. Live trading lost money. Here are five reasons your backtest was lying — look-ahead bias, survivorship, execution costs, and more. With Python code to detect each.">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://ssystechsoftwares.com/backtesting-pitfalls-trading-strategy">
+    <meta property="og:title" content="Backtesting Pitfalls: 5 Ways Your Trading Strategy Leaks Future Data">
+    <meta property="og:description" content="If your backtest Sharpe is too good to be true, it is. A practical guide to detecting and removing data leakage in Python backtesting systems.">
+    <meta property="og:type" content="article">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0f1a; color: #d1d5db; line-height: 1.7; }
+        a { color: #22c55e; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .container { max-width: 780px; margin: 0 auto; padding: 40px 24px; }
+        nav { border-bottom: 1px solid #1f2937; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        nav .brand { color: #fff; font-weight: 700; font-size: 18px; }
+        nav .links a { margin-left: 20px; font-size: 14px; color: #9ca3af; }
+        h1 { color: #fff; font-size: 32px; margin: 40px 0 16px; line-height: 1.3; }
+        h2 { color: #fff; font-size: 22px; margin: 36px 0 12px; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+        h3 { color: #e5e7eb; font-size: 17px; margin: 24px 0 8px; }
+        p { margin: 12px 0; font-size: 15px; }
+        .meta { color: #6b7280; font-size: 13px; margin-bottom: 32px; }
+        pre { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; font-size: 13px; line-height: 1.5; }
+        code { font-family: 'SF Mono', Monaco, 'Consolas', monospace; color: #86efac; }
+        .inline-code { background: #1f2937; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+        .callout { background: #1f2937; border-left: 3px solid #22c55e; padding: 16px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+        .callout-warn { border-left-color: #f59e0b; }
+        .callout-err { border-left-color: #ef4444; }
+        .callout p { margin: 0; font-size: 14px; }
+        .cta { background: linear-gradient(135deg, #065f46, #064e3b); border: 1px solid #10b981; border-radius: 12px; padding: 24px; margin: 32px 0; text-align: center; }
+        .cta h3 { color: #fff; margin: 0 0 8px; }
+        .cta p { color: #9ca3af; font-size: 14px; margin: 0 0 16px; }
+        .cta a.btn { background: #22c55e; color: #000; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; text-decoration: none; }
+        .cta a.btn:hover { background: #16a34a; }
+        ul, ol { margin: 12px 0 12px 24px; font-size: 15px; }
+        li { margin: 6px 0; }
+        footer { border-top: 1px solid #1f2937; padding: 24px; text-align: center; color: #6b7280; font-size: 12px; margin-top: 60px; }
+        .toc { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 20px; margin: 24px 0; }
+        .toc h3 { margin: 0 0 12px; font-size: 14px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
+        .toc ol { margin: 0; padding-left: 20px; }
+        .toc li { margin: 4px 0; font-size: 14px; }
+        .pitfall-number { display: inline-block; background: #ef4444; color: #fff; width: 26px; height: 26px; border-radius: 50%; text-align: center; line-height: 26px; font-weight: 700; font-size: 14px; margin-right: 8px; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" class="brand">SsysTech Softwares</a>
+        <div class="links">
+            <a href="https://zenhodl.net">ZenHodl</a>
+            <a href="https://zenhodl.net/docs">API Docs</a>
+            <a href="https://zenhodl.net/results">Live Results</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Backtesting Pitfalls: 5 Ways Your Trading Strategy Leaks Future Data</h1>
+        <p class="meta">Published April 2026 &middot; 13 min read &middot; By SsysTech Softwares</p>
+
+        <p>You backtested a strategy on three years of historical data. Sharpe 2.3, max drawdown 8%, win rate 68%. You deployed live. Two weeks later you're down 12% with a win rate of 49%. What happened?</p>
+
+        <p>The most likely answer: your backtest leaked future information. This post walks through the five most common leakage patterns, with concrete Python examples of what to look for and how to fix each.</p>
+
+        <div class="callout callout-err">
+            <p><strong>The rule:</strong> At the moment you make a trading decision in your backtest, the only information available must be what would have been available to you at that exact moment in real-time. Everything else is a leak.</p>
+        </div>
+
+        <div class="toc">
+            <h3>Contents</h3>
+            <ol>
+                <li><a href="#lookahead">Look-ahead bias in feature construction</a></li>
+                <li><a href="#survivorship">Survivorship bias in market data</a></li>
+                <li><a href="#execution">Unrealistic execution prices</a></li>
+                <li><a href="#overfitting">Overfitting the threshold</a></li>
+                <li><a href="#resampling">Resampling ruined your out-of-sample set</a></li>
+                <li><a href="#checklist">Sanity-check checklist</a></li>
+            </ol>
+        </div>
+
+        <h2 id="lookahead">1. Look-ahead bias in feature construction</h2>
+
+        <p><span class="pitfall-number">1</span>The most expensive bug. You computed a feature using data that wasn't available at the prediction moment.</p>
+
+        <p>Classic case: you want a "rolling 30-day volatility" feature. You use pandas:</p>
+
+<pre><code># BROKEN: centered rolling window sees FUTURE data
+df['vol_30d'] = df['returns'].rolling(30, center=True).std()
+
+# BROKEN: computing vol then normalizing leaks future statistics
+df['vol_norm'] = df['vol_30d'] / df['vol_30d'].mean()
+
+# CORRECT: backward-looking window only, no future data
+df['vol_30d'] = df['returns'].rolling(30).std().shift(1)
+</code></pre>
+
+        <p>The <span class="inline-code">.shift(1)</span> is critical. Rolling windows in pandas return the value <em>at the end of the window</em>, which is the <em>current</em> row — the same row you're using it to predict. You need yesterday's value for today's prediction.</p>
+
+        <h3>Sports-data analog</h3>
+
+        <p>In sports prediction, look-ahead often hides in "team stats." You want each game's feature to include team-level pace, offensive rating, defensive rating. If you compute those stats across a full season of games and then join them onto the game-level row, every early-season game has access to late-season statistics that a live bot couldn't know.</p>
+
+<pre><code># BROKEN: season-average stats include future games
+team_stats = games.groupby('team')[['pace', 'ortg', 'drtg']].mean()
+games = games.merge(team_stats, on='team')
+
+# CORRECT: cumulative stats only up to the game date
+games = games.sort_values(['team', 'date'])
+for col in ['pace', 'ortg', 'drtg']:
+    games[f'{col}_prior'] = (
+        games.groupby('team')[col]
+        .shift(1)
+        .expanding()
+        .mean()
+        .reset_index(level=0, drop=True)
+    )
+</code></pre>
+
+        <div class="callout callout-warn">
+            <p><strong>Detection test:</strong> split your data chronologically at some random date D. Rebuild features on data before D only. If any feature value for a row dated before D differs between the two builds, you have look-ahead.</p>
+        </div>
+
+        <h2 id="survivorship">2. Survivorship bias in market data</h2>
+
+        <p><span class="pitfall-number">2</span>Your dataset only contains assets, teams, or markets that still exist. Delisted stocks, relegated soccer teams, closed futures contracts — they're missing. Your model trained on a filtered population that excludes the worst historical outcomes.</p>
+
+        <p>In sports betting, a common version: you trained on NBA teams active in 2024. Any team that relocated, rebranded, or had its roster fully turn over between 2020 and 2024 is implicitly "missing" historical games in your training set. The model learned patterns on teams that persisted — which is a biased sample.</p>
+
+        <p>Detection is uncomfortable: verify you have data on entities that <em>no longer exist</em>.</p>
+
+<pre><code># Check: how many distinct teams appear in 2020 season?
+teams_2020 = set(games[games['season'] == 2020]['team'].unique())
+teams_2024 = set(games[games['season'] == 2024]['team'].unique())
+
+dropped = teams_2020 - teams_2024
+added = teams_2024 - teams_2020
+print(f"Teams in 2020 no longer in 2024: {dropped}")
+print(f"Teams in 2024 not in 2020: {added}")
+</code></pre>
+
+        <p>For prediction markets, the survivorship equivalent is <strong>resolved markets only</strong>. If your backtest dataset excludes markets that never resolved or were invalidated, you're excluding losing trades that would have happened in live trading (the position sits until refund).</p>
+
+        <h2 id="execution">3. Unrealistic execution prices</h2>
+
+        <p><span class="pitfall-number">3</span>Your backtest assumed trades filled at the mid-price, instantly, with no slippage, no fees, no latency. Production traders fill at the ask (or worse), pay taker fees, and lose cents to latency every trade.</p>
+
+        <p>Minimum execution cost model:</p>
+
+<pre><code>SLIPPAGE_C = 1.0        # Average slippage from displayed ask
+TAKER_FEE_C = 2.0       # Exchange taker fee
+LATENCY_PENALTY_C = 0.5 # Price movement during 3-5s execution
+
+def realistic_entry_price(displayed_ask_c: float) -> float:
+    """Effective fill price including execution costs, in cents."""
+    return displayed_ask_c + SLIPPAGE_C + LATENCY_PENALTY_C
+
+def pnl_per_share(entry_c: float, settlement_c: float, sport_fee_c: float = 0.5) -> float:
+    """Realized P&amp;L per share after fees."""
+    effective_entry = entry_c + SLIPPAGE_C + LATENCY_PENALTY_C
+    gross_pnl = settlement_c - effective_entry
+    return gross_pnl - TAKER_FEE_C - sport_fee_c
+</code></pre>
+
+        <p>On 100-200 trade samples, the difference between "fills at mid" and "fills at ask + 3c" can flip a profitable strategy to a losing one. Always model execution cost, and err on the pessimistic side.</p>
+
+        <div class="callout">
+            <p><strong>Tighter test:</strong> simulate fills using the actual order book depth, not just top-of-book. If you're buying 5 contracts at a price level that shows 2 contracts available, you eat 3 contracts at a worse level.</p>
+        </div>
+
+        <h2 id="overfitting">4. Overfitting the threshold</h2>
+
+        <p><span class="pitfall-number">4</span>You grid-searched <span class="inline-code">min_edge</span> over {3, 4, 5, 6, 7, 8, 9, 10} on your backtest and picked <span class="inline-code">min_edge=7</span> because it had the highest Sharpe. Congratulations, you selected the threshold that best fits your backtest's noise.</p>
+
+        <p>This is model-selection leakage. Any threshold you tune <em>on</em> the backtest can't also be evaluated <em>against</em> the same backtest. Your reported Sharpe is biased upward.</p>
+
+        <p>Three ways to handle it:</p>
+
+        <ul>
+            <li><strong>Walk-forward cross-validation.</strong> Train on 2020-2022, tune on 2023, test on 2024. Never re-touch 2024.</li>
+            <li><strong>Sensitivity analysis.</strong> Report Sharpe across a range of thresholds. If Sharpe is 1.8 at min_edge=5 but 2.3 at min_edge=7 and 1.6 at min_edge=9, the 2.3 is fragile. Report 1.8.</li>
+            <li><strong>Bootstrap the distribution.</strong> Resample trades with replacement 1000 times. Report the 5th percentile Sharpe. If it's still positive, the strategy has real edge.</li>
+        </ul>
+
+<pre><code>from sklearn.utils import resample
+import numpy as np
+
+def bootstrap_sharpe(pnl_per_trade: np.ndarray, n_boot: int = 1000) -> dict:
+    sharpes = []
+    for _ in range(n_boot):
+        sample = resample(pnl_per_trade)
+        s = np.sqrt(252) * sample.mean() / sample.std() if sample.std() &gt; 0 else 0
+        sharpes.append(s)
+    return {
+        "mean": np.mean(sharpes),
+        "p05":  np.percentile(sharpes, 5),
+        "p50":  np.percentile(sharpes, 50),
+        "p95":  np.percentile(sharpes, 95),
+    }
+</code></pre>
+
+        <h2 id="resampling">5. Resampling ruined your out-of-sample set</h2>
+
+        <p><span class="pitfall-number">5</span>You used <span class="inline-code">train_test_split</span> with <span class="inline-code">shuffle=True</span> on time-series data. Now your test set contains rows from the same games as your training set — just different minutes within those games. The model effectively memorized game outcomes.</p>
+
+<pre><code># BROKEN: random split on game-level rows leaks outcomes
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+# CORRECT: split by game_id so all snapshots from one game go to same set
+import hashlib
+def game_bucket(game_id: str, n_buckets: int = 100) -> int:
+    h = int(hashlib.md5(str(game_id).encode()).hexdigest(), 16)
+    return h % n_buckets
+
+test_games = set(gid for gid in games['game_id'].unique()
+                 if game_bucket(gid) &lt; 20)  # 20% to test
+train = games[~games['game_id'].isin(test_games)]
+test  = games[games['game_id'].isin(test_games)]
+</code></pre>
+
+        <p>Hashing on game_id is deterministic: you always get the same split given the same input. That's good for reproducibility but you still have to be careful — if game IDs correlate with time (monotonic counter), you can end up with all old games in train and new in test, or vice versa.</p>
+
+        <p>The gold-standard for time-series trading: <strong>walk-forward</strong>. Train on seasons 1..N, test on season N+1, then slide forward.</p>
+
+        <h2 id="checklist">6. Sanity-check checklist</h2>
+
+        <p>Before you trust a backtest Sharpe, verify:</p>
+
+        <ul>
+            <li>[ ] Every feature was computed using only data available at prediction time (<span class="inline-code">.shift(1)</span> before every rolling/expanding stat)</li>
+            <li>[ ] Data includes entities that no longer exist (delisted stocks, relegated teams, invalidated markets)</li>
+            <li>[ ] Execution cost model includes slippage, taker fee, latency penalty, and sport/asset-specific fees</li>
+            <li>[ ] Thresholds are selected via walk-forward CV, not grid-search-on-test</li>
+            <li>[ ] Train/test split is by entity (game_id, symbol) not by row</li>
+            <li>[ ] Bootstrap Sharpe's 5th percentile is still positive</li>
+            <li>[ ] Sensitivity analysis across reasonable parameter ranges is reported, not just the optimum</li>
+            <li>[ ] Live paper-trading for at least 30 days before capital</li>
+        </ul>
+
+        <div class="callout">
+            <p><strong>The final test:</strong> paper-trade in production for a month. If the paper P&amp;L converges with the backtest P&amp;L to within reason, your backtest was honest. If not, one of these pitfalls is still hiding.</p>
+        </div>
+
+        <div class="cta">
+            <h3>Skip the backtest build. Use verified live P&amp;L.</h3>
+            <p>ZenHodl's sports prediction API publishes every live trade on-chain with real execution prices, real fees, and real latency — no backtest. Fair win probabilities for 11 sports, verifiable performance, REST API access.</p>
+            <a href="https://zenhodl.net/results" class="btn">See verified live results</a>
+        </div>
+
+        <p class="meta">Further reading: <a href="/live-model-recalibration-python.html">Live Model Recalibration: Fixing ML Drift in Production</a> &middot; <a href="/polymarket-trading-bot-python.html">How to Build a Polymarket Trading Bot in Python</a></p>
+    </div>
+
+    <footer>
+        SsysTech Softwares &middot; Technical writing on Python, ML, and APIs for quantitative systems
+    </footer>
+</body>
+</html>
