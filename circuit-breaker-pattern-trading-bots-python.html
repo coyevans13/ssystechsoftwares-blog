@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Circuit Breaker Pattern for Trading Bots in Python | SsysTech Softwares</title>
+    <meta name="description" content="A production-grade circuit breaker pattern for trading bots in Python. Auto-disable losing strategies, hysteresis to prevent flapping, fail-open semantics, and JSON state persistence. Working code.">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://ssystechsoftwares.com/circuit-breaker-pattern-trading-bots-python">
+    <meta property="og:title" content="The Circuit Breaker Pattern for Trading Bots in Python">
+    <meta property="og:description" content="Build a hysteresis-protected, fail-open circuit breaker that auto-disables losing strategies and self-heals on recovery — with full Python code.">
+    <meta property="og:type" content="article">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0f1a; color: #d1d5db; line-height: 1.7; }
+        a { color: #22c55e; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .container { max-width: 780px; margin: 0 auto; padding: 40px 24px; }
+        nav { border-bottom: 1px solid #1f2937; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        nav .brand { color: #fff; font-weight: 700; font-size: 18px; }
+        nav .links a { margin-left: 20px; font-size: 14px; color: #9ca3af; }
+        h1 { color: #fff; font-size: 32px; margin: 40px 0 16px; line-height: 1.3; }
+        h2 { color: #fff; font-size: 22px; margin: 36px 0 12px; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+        h3 { color: #e5e7eb; font-size: 17px; margin: 24px 0 8px; }
+        p { margin: 12px 0; font-size: 15px; }
+        .meta { color: #6b7280; font-size: 13px; margin-bottom: 32px; }
+        pre { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; font-size: 13px; line-height: 1.5; }
+        code { font-family: 'SF Mono', Monaco, 'Consolas', monospace; color: #86efac; }
+        .inline-code { background: #1f2937; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+        .callout { background: #1f2937; border-left: 3px solid #22c55e; padding: 16px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+        .callout-warn { border-left-color: #f59e0b; }
+        .callout p { margin: 0; font-size: 14px; }
+        .cta { background: linear-gradient(135deg, #065f46, #064e3b); border: 1px solid #10b981; border-radius: 12px; padding: 24px; margin: 32px 0; text-align: center; }
+        .cta h3 { color: #fff; margin: 0 0 8px; }
+        .cta p { color: #9ca3af; font-size: 14px; margin: 0 0 16px; }
+        .cta a.btn { background: #22c55e; color: #000; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; text-decoration: none; }
+        .cta a.btn:hover { background: #16a34a; }
+        ul, ol { margin: 12px 0 12px 24px; font-size: 15px; }
+        li { margin: 6px 0; }
+        footer { border-top: 1px solid #1f2937; padding: 24px; text-align: center; color: #6b7280; font-size: 12px; margin-top: 60px; }
+        .toc { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 20px; margin: 24px 0; }
+        .toc h3 { margin: 0 0 12px; font-size: 14px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
+        .toc ol { margin: 0; padding-left: 20px; }
+        .toc li { margin: 4px 0; font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1f2937; }
+        th { color: #9ca3af; font-weight: 600; text-transform: uppercase; font-size: 12px; }
+        strong { color: #e5e7eb; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" class="brand">SsysTech Softwares</a>
+        <div class="links">
+            <a href="https://zenhodl.net">ZenHodl</a>
+            <a href="https://zenhodl.net/docs">API Docs</a>
+            <a href="https://zenhodl.net/results">Live Results</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>The Circuit Breaker Pattern for Trading Bots in Python</h1>
+        <p class="meta">Published May 5, 2026 &middot; 12 min read &middot; By SsysTech Softwares</p>
+
+        <p>Your trading bot just lost three days in a row on one strategy. The model is bad, or the regime changed, or the data feed is corrupt &mdash; you don't know yet. By the time you wake up tomorrow morning, it'll have lost three more days. That's the gap a circuit breaker closes.</p>
+
+        <p>The circuit breaker pattern, borrowed from electrical engineering and microservices, gives a system the ability to automatically suspend a failing component until the failure passes. In a trading bot, "failing component" is usually a single strategy or instrument that's bleeding while the rest of the portfolio is fine. You want to disable just that strategy, not the whole bot, and you want it to come back online automatically when conditions normalize &mdash; not next Tuesday after you remember to flip a switch.</p>
+
+        <p>This post walks through a production circuit breaker we run across 10 sports on automated prediction market bots. It's hysteresis-protected, fail-open, JSON-persisted, and ~150 lines of Python. All code is Python 3.10+ and uses only the standard library plus pandas (for the rolling P&amp;L calculation).</p>
+
+        <div class="toc">
+            <h3>Contents</h3>
+            <ol>
+                <li><a href="#why">Why every trading bot needs one</a></li>
+                <li><a href="#design">Design: hysteresis, fail-open, sample minimums</a></li>
+                <li><a href="#state">Persistent state with JSON</a></li>
+                <li><a href="#core">The core breaker class</a></li>
+                <li><a href="#integration">Wiring into the trading loop</a></li>
+                <li><a href="#cron">The nightly evaluation cron</a></li>
+                <li><a href="#anti">Anti-patterns: what not to do</a></li>
+                <li><a href="#testing">Testing the breaker</a></li>
+            </ol>
+        </div>
+
+        <h2 id="why">Why Every Trading Bot Needs One</h2>
+
+        <p>Without a circuit breaker, a bot in drawdown has only two states: trading and not trading. Switching between them requires a human noticing, deciding, and acting. That loop has a typical latency of 24-72 hours, during which a degraded strategy continues to lose money.</p>
+
+        <p>A daily P&amp;L kill-switch (cap session losses at &minus;$50, restart tomorrow) handles intra-day failures. The circuit breaker handles multi-day failures &mdash; the slower, more expensive class. The two are complementary: kill-switch is intra-session, breaker is multi-session.</p>
+
+        <h2 id="design">Design: Hysteresis, Fail-Open, Sample Minimums</h2>
+
+        <p>Three properties make the difference between a useful breaker and one that constantly false-fires:</p>
+
+        <p><strong>1. Hysteresis.</strong> Disable threshold and re-enable threshold are different. Trip at &minus;5% rolling 30d ROI; re-enable at &gt;0% rolling 30d ROI. Without this gap, the breaker flaps on and off every time ROI crosses zero, which is constantly. With it, the strategy has to actually recover before resuming.</p>
+
+        <p><strong>2. Fail-open semantics.</strong> If the breaker can't read its state file, can't compute P&amp;L, or hits any exception, it returns "allow trade." A breaker that fails closed on its own bug is worse than no breaker &mdash; it silently halts your entire system. Always default to permissive.</p>
+
+        <p><strong>3. Minimum sample size.</strong> A strategy with 8 trades and &minus;7% ROI over the last 30 days isn't necessarily broken &mdash; that's noise. Require at least 30 trades in the window before the breaker is allowed to trip. Otherwise you'll disable strategies for being unlucky on small samples.</p>
+
+        <div class="callout">
+            <p><strong>Production note:</strong> we tuned these parameters by walking forward across a year of live trading data and asking, for each candidate (trip threshold, recovery threshold, min sample), how many real degradations would have been caught and how many healthy strategies would have been false-tripped. &minus;5%/+0%/N=30 was the sweet spot.</p>
+        </div>
+
+        <h2 id="state">Persistent State with JSON</h2>
+
+        <p>The breaker state needs to survive process restarts and be readable by humans (so you can see what's blocked and why). A flat JSON file is the simplest workable choice:</p>
+
+<pre><code class="language-json">{
+  "as_of": "2026-05-05T03:49:12Z",
+  "sports": {
+    "NBA":     {"status": "active",   "roi_30d": 0.034, "n_30d": 87,  "tripped_at": null},
+    "NHL":     {"status": "blocked",  "roi_30d": -0.071, "n_30d": 42, "tripped_at": "2026-05-03T03:49:08Z", "reason": "roi_below_threshold"},
+    "MLB":     {"status": "active",   "roi_30d": 0.012, "n_30d": 134, "tripped_at": null},
+    "NCAAMB":  {"status": "active",   "roi_30d": 0.058, "n_30d": 211, "tripped_at": null},
+    "TENNIS":  {"status": "active",   "roi_30d": 0.021, "n_30d": 71,  "tripped_at": null},
+    "CS2":     {"status": "monitor",  "roi_30d": -0.018, "n_30d": 18, "tripped_at": null, "note": "below_min_n"}
+  }
+}</code></pre>
+
+        <p>Three statuses: <code>active</code> (allow trades), <code>blocked</code> (reject trades), <code>monitor</code> (allow but flag &mdash; below min sample). The cron writes this file once per day; the bot reads it on every signal evaluation.</p>
+
+        <h2 id="core">The Core Breaker Class</h2>
+
+        <p>The breaker has two halves: the daily evaluator (decides who's blocked, writes JSON) and the runtime check (reads JSON, returns allow/deny). Here's the runtime side &mdash; the hot path the bot calls before placing every order:</p>
+
+<pre><code>import json
+import time
+from pathlib import Path
+from typing import Tuple
+
+STATE_PATH = Path(__file__).resolve().parent / "sport_circuit_state.json"
+STALE_AFTER_SECONDS = 60 * 60 * 30   # 30h: cron runs daily, allow some slack
+
+
+class CircuitBreaker:
+    """Reads JSON state, returns allow/deny per sport. Fail-open."""
+
+    def __init__(self, state_path: Path = STATE_PATH):
+        self.state_path = state_path
+        self._cache = None
+        self._cache_mtime = 0.0
+
+    def _load(self) -> dict:
+        try:
+            mtime = self.state_path.stat().st_mtime
+            if self._cache is not None and mtime == self._cache_mtime:
+                return self._cache
+            with self.state_path.open() as f:
+                state = json.load(f)
+            self._cache, self._cache_mtime = state, mtime
+            return state
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return {}
+
+    def check(self, sport: str) -> Tuple[bool, str]:
+        """Return (allow, reason). Fail open on any error."""
+        try:
+            state = self._load()
+            if not state:
+                return True, "state_missing_fail_open"
+
+            # Stale state == fail open: cron probably broke
+            as_of = state.get("as_of_unix", 0)
+            if time.time() - as_of &gt; STALE_AFTER_SECONDS:
+                return True, "state_stale_fail_open"
+
+            sport_state = state.get("sports", {}).get(sport)
+            if sport_state is None:
+                return True, "sport_unknown_fail_open"
+
+            status = sport_state.get("status", "active")
+            if status == "blocked":
+                return False, f"circuit_breaker_blocked"
+            return True, status
+        except Exception:
+            return True, "exception_fail_open"</code></pre>
+
+        <p>Notice the fail-open paths: missing file, stale state, missing sport, exception &mdash; all return <code>True</code>. The breaker can never accidentally block trading because of its own bug. The price you pay for this is that a broken breaker will silently let through trades you wanted to block. That's the right trade-off for a non-critical safety net; if you want hard guarantees, layer a second mechanism (kill-switch, manual review).</p>
+
+        <h2 id="integration">Wiring into the Trading Loop</h2>
+
+        <p>The breaker should sit immediately before order submission, after all your signal logic. That way you keep generating signals (so your CLV log accumulates and you can later analyze what would have happened) but you don't trade them:</p>
+
+<pre><code>breaker = CircuitBreaker()
+
+def evaluate_signal(candidate):
+    # ... existing checks: edge, fair_prob, max_entry, etc ...
+    if not basic_checks_pass(candidate):
+        return None
+
+    # Last gate before placing the order
+    allow, reason = breaker.check(candidate.sport)
+    if not allow:
+        log_rejected_signal(candidate, reason=reason)
+        return None
+
+    return submit_order(candidate)</code></pre>
+
+        <p>Logging rejected signals is important &mdash; it gives you the counterfactual. After a sport recovers, you can backtest: "what would my P&amp;L have been if I'd kept trading?" If the breaker correctly avoided losses, the answer validates the design. If you would have made money, you tune the threshold.</p>
+
+        <h2 id="cron">The Nightly Evaluation Cron</h2>
+
+        <p>The other half of the breaker is the daily job that recomputes status. Read your trade log, slice the last 30 days, compute size-weighted ROI per sport, apply the trip/recovery rules, write the JSON.</p>
+
+<pre><code>import json
+import time
+import pandas as pd
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+TRADES_PATH = Path("trades.jsonl")
+STATE_PATH = Path("sport_circuit_state.json")
+ROI_TRIP = -0.05        # disable below -5% ROI
+ROI_RECOVER = 0.0       # re-enable above 0% ROI
+MIN_N = 30              # minimum trades in window
+WINDOW_DAYS = 30
+
+
+def load_trades() -&gt; pd.DataFrame:
+    rows = []
+    with TRADES_PATH.open() as f:
+        for line in f:
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return pd.DataFrame(rows)
+
+
+def evaluate_breaker():
+    df = load_trades()
+    df["ts"] = pd.to_datetime(df["ts"], utc=True, errors="coerce")
+    df = df[df["resolved"].notna()]
+    cutoff = datetime.now(timezone.utc) - timedelta(days=WINDOW_DAYS)
+    df = df[df["ts"] &gt;= cutoff]
+
+    # Size-weighted ROI per sport
+    df["dollar_pnl"] = df["pnl_c"] * df["size"] / 100
+    df["dollar_size"] = df["entry_price_c"] * df["size"] / 100
+    grouped = df.groupby("sport").agg(
+        pnl=("dollar_pnl", "sum"),
+        cost=("dollar_size", "sum"),
+        n=("dollar_pnl", "count"),
+    )
+    grouped["roi_30d"] = grouped["pnl"] / grouped["cost"]
+
+    # Read previous state for hysteresis
+    try:
+        with STATE_PATH.open() as f:
+            prev = json.load(f).get("sports", {})
+    except (FileNotFoundError, json.JSONDecodeError):
+        prev = {}
+
+    new_state = {}
+    for sport, row in grouped.iterrows():
+        prev_status = prev.get(sport, {}).get("status", "active")
+
+        if row["n"] &lt; MIN_N:
+            new_state[sport] = {
+                "status": "monitor", "roi_30d": float(row["roi_30d"]),
+                "n_30d": int(row["n"]), "note": "below_min_n",
+            }
+            continue
+
+        if prev_status == "blocked":
+            # Hysteresis: only re-enable when above recovery threshold
+            if row["roi_30d"] &gt;= ROI_RECOVER:
+                status, reason = "active", "recovered"
+            else:
+                status, reason = "blocked", "still_below_threshold"
+        else:
+            if row["roi_30d"] &lt; ROI_TRIP:
+                status, reason = "blocked", "roi_below_threshold"
+            else:
+                status, reason = "active", "ok"
+
+        new_state[sport] = {
+            "status": status, "roi_30d": float(row["roi_30d"]),
+            "n_30d": int(row["n"]), "reason": reason,
+            "tripped_at": (
+                datetime.now(timezone.utc).isoformat()
+                if status == "blocked" and prev_status != "blocked"
+                else prev.get(sport, {}).get("tripped_at")
+            ),
+        }
+
+    out = {
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "as_of_unix": int(time.time()),
+        "sports": new_state,
+    }
+    tmp = STATE_PATH.with_suffix(".tmp")
+    with tmp.open("w") as f:
+        json.dump(out, f, indent=2)
+    tmp.replace(STATE_PATH)
+
+
+if __name__ == "__main__":
+    evaluate_breaker()</code></pre>
+
+        <p>Schedule via cron, daily, after your data-aggregation jobs:</p>
+
+<pre><code># 03:49 daily, 10 minutes after the CLV bucket aggregator
+49 3 * * * cd /opt/yourapp && python3 sport_circuit_breaker.py &gt;&gt; /var/log/breaker.log 2&gt;&amp;1</code></pre>
+
+        <div class="callout callout-warn">
+            <p><strong>Without this cron, the breaker is a no-op.</strong> The state file goes stale, the runtime check fails open on staleness, and your bot trades through any drawdown. We learned this the hard way after deploying the breaker code without the cron entry &mdash; everything looked fine until we noticed nothing was ever blocking, three weeks later. Always pair the runtime code with a cron-health alert.</p>
+        </div>
+
+        <h2 id="anti">Anti-Patterns: What Not To Do</h2>
+
+        <p>Things we tried that didn't work:</p>
+
+        <ul>
+            <li><strong>Win-rate trip threshold.</strong> Win rate is too noisy; we got false trips on lucky-loss streaks where ROI was actually fine. Use size-weighted ROI.</li>
+            <li><strong>No hysteresis.</strong> Strategies hovering near zero ROI flapped on/off daily, generating spurious "circuit breaker tripped" alerts that desensitized us to real ones.</li>
+            <li><strong>Symmetric threshold (trip = recover = same number).</strong> Equivalent to no hysteresis, same flapping.</li>
+            <li><strong>Per-strategy breaker (instead of per-sport).</strong> Too granular; samples too small. Per-sport is the right unit when each sport has multiple strategies.</li>
+            <li><strong>Hard-coded thresholds in the runtime check.</strong> If you ever want to override (manual disable, manual force-enable), having all logic in the cron job and only state in the JSON makes operator overrides trivial: just edit the JSON.</li>
+            <li><strong>Fail-closed on missing file.</strong> Newly deployed bot, no state yet &mdash; trades never start. Always fail open.</li>
+        </ul>
+
+        <h2 id="testing">Testing the Breaker</h2>
+
+        <p>Three tests we run in CI for the breaker:</p>
+
+<pre><code>def test_fail_open_on_missing_file(tmp_path):
+    breaker = CircuitBreaker(state_path=tmp_path / "missing.json")
+    allow, reason = breaker.check("NBA")
+    assert allow is True
+    assert "fail_open" in reason
+
+
+def test_blocks_when_state_says_blocked(tmp_path):
+    state = {
+        "as_of_unix": int(time.time()),
+        "sports": {"NBA": {"status": "blocked", "reason": "roi_below_threshold"}},
+    }
+    p = tmp_path / "s.json"
+    p.write_text(json.dumps(state))
+    breaker = CircuitBreaker(state_path=p)
+    allow, reason = breaker.check("NBA")
+    assert allow is False
+
+
+def test_fail_open_on_stale_state(tmp_path):
+    state = {
+        "as_of_unix": int(time.time()) - 60 * 60 * 48,    # 48h old
+        "sports": {"NBA": {"status": "blocked"}},
+    }
+    p = tmp_path / "s.json"
+    p.write_text(json.dumps(state))
+    breaker = CircuitBreaker(state_path=p)
+    allow, reason = breaker.check("NBA")
+    assert allow is True
+    assert "stale" in reason</code></pre>
+
+        <p>The stale-state test is the most important one to keep around. It's the one failure mode that's both common (cron fails silently for two days) and catastrophic if handled wrong (entire bot blocked on one bad cron run).</p>
+
+        <h2>Putting It All Together</h2>
+
+        <p>The full circuit breaker is roughly 200 lines of Python: 80 for the runtime check class, 100 for the cron evaluator, 20 for tests. It runs in production daily across 10 sports and has caught two material model degradations that would otherwise have eaten 5-7 days of P&amp;L each before manual intervention.</p>
+
+        <p>The hardest part isn't writing it &mdash; it's choosing the parameters and committing to letting the breaker make decisions. Operators tend to override their own circuit breakers ("I think the strategy will recover, let me re-enable") and then watch the strategy keep losing. If you build the breaker, trust the breaker. Tune the thresholds offline; don't override them mid-drawdown.</p>
+
+        <div class="cta">
+            <h3>See it running in production</h3>
+            <p>ZenHodl's automated bots use this exact pattern across 10 sports. Per-sport breaker state, hysteresis, daily cron, fail-open semantics. The whole stack is part of the platform.</p>
+            <a href="https://zenhodl.net/results" class="btn">See Live Results &rarr;</a>
+        </div>
+
+        <h2>Further Reading</h2>
+        <ul>
+            <li><a href="/live-model-recalibration-python.html">Live Model Recalibration in Python</a> &mdash; the other side of the same coin: instead of disabling a degraded strategy, fix the calibration in place.</li>
+            <li><a href="/backtesting-pitfalls-trading-strategy.html">Backtesting Pitfalls</a> &mdash; how to test your breaker logic without leaking future P&amp;L into the trip decision.</li>
+            <li><a href="https://zenhodl.net/docs">ZenHodl API docs</a> &mdash; calibrated win probabilities for prediction market trading.</li>
+        </ul>
+
+        <div class="footer">
+            <p>&copy; 2026 SsysTech Softwares &middot; <a href="https://zenhodl.net">ZenHodl</a></p>
+        </div>
+    </div>
+</body>
+</html>
