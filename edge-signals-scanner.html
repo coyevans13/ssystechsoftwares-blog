@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Edge Signals Scanner — Free Tool | SsysTech Softwares</title>
+    <meta name="description" content="Free edge signal calculator and live demo simulator. Compute real-time betting edge, after-cost edge, quarter-Kelly position size, and signal verdict for any sports prediction market trade.">
+    <meta name="robots" content="index,follow">
+    <meta property="og:title" content="Real-Time Edge Signals Scanner — Free Tool">
+    <meta property="og:description" content="Compute edge, costs, Kelly size, and signal verdict for prediction-market trades. Live demo feed included.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://ssystechsoftwares.com/edge-signals-scanner.html">
+    <link rel="canonical" href="https://ssystechsoftwares.com/edge-signals-scanner.html">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0f1a; color: #d1d5db; line-height: 1.7; }
+        .container { max-width: 880px; margin: 0 auto; padding: 40px 20px; }
+        h1 { color: #ffffff; font-size: 30px; margin-bottom: 8px; line-height: 1.3; }
+        h2 { color: #ffffff; font-size: 20px; margin: 36px 0 14px; padding-top: 16px; border-top: 1px solid #1f2937; }
+        h3 { color: #e5e7eb; font-size: 16px; margin: 18px 0 8px; }
+        p { margin-bottom: 14px; font-size: 15px; }
+        a { color: #22c55e; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #1f2937; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Monaco, monospace; font-size: 14px; color: #86efac; }
+        pre { background: #0d1117; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; }
+        pre code { background: none; padding: 0; font-size: 13px; line-height: 1.6; }
+        .subtitle { color: #9ca3af; font-size: 16px; margin-bottom: 24px; }
+        .nav { border-bottom: 1px solid #1f2937; padding: 16px 0; margin-bottom: 32px; }
+        .nav a { color: #9ca3af; font-size: 14px; font-weight: 500; }
+        .footer { border-top: 1px solid #1f2937; margin-top: 60px; padding-top: 24px; color: #6b7280; font-size: 13px; text-align: center; }
+
+        .tool { background: #0d1117; border: 1px solid #1f2937; border-radius: 12px; padding: 28px; margin: 24px 0; }
+        .tool h3 { margin: 0 0 18px; color: #22c55e; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; border: none; padding: 0; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+        .field label { display: block; font-size: 12px; color: #9ca3af; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+        .field input, .field select { width: 100%; background: #1f2937; border: 1px solid #374151; color: #e5e7eb; padding: 10px 12px; border-radius: 6px; font-family: inherit; font-size: 14px; }
+        .field input:focus, .field select:focus { outline: none; border-color: #22c55e; }
+
+        .output { margin-top: 20px; background: #1a2025; border-radius: 8px; padding: 18px; font-family: 'SF Mono', Monaco, monospace; font-size: 14px; }
+        .output .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1f2937; }
+        .output .row:last-child { border-bottom: none; }
+        .output .label { color: #9ca3af; }
+        .output .val { color: #e5e7eb; font-weight: 600; }
+        .verdict { margin-top: 14px; padding: 14px; border-radius: 6px; font-family: 'SF Mono', Monaco, monospace; font-size: 14px; font-weight: 600; }
+        .verdict.pass { background: #052e16; border: 1px solid #22c55e; color: #86efac; }
+        .verdict.skip-low { background: #2e1b04; border: 1px solid #f59e0b; color: #fcd34d; }
+        .verdict.skip-high { background: #2e0606; border: 1px solid #dc2626; color: #fca5a5; }
+        .verdict.neutral { background: #1f2937; border: 1px solid #374151; color: #9ca3af; }
+        .verdict-detail { font-weight: normal; font-size: 13px; margin-top: 6px; opacity: 0.85; }
+
+        .feed { background: #0d1117; border: 1px solid #1f2937; border-radius: 12px; padding: 0; overflow: hidden; }
+        .feed-header { background: #1a2025; padding: 14px 20px; border-bottom: 1px solid #1f2937; display: flex; justify-content: space-between; align-items: center; }
+        .feed-header h3 { margin: 0; color: #22c55e; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; border: none; padding: 0; display: flex; align-items: center; gap: 8px; }
+        .pulse { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 1.4s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .feed-header .ctrl { background: transparent; border: 1px solid #374151; color: #9ca3af; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .feed-header .ctrl:hover { color: #22c55e; border-color: #22c55e; }
+        .feed-table { width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; }
+        .feed-table th { background: #1f2937; color: #6b7280; text-align: left; padding: 10px 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
+        .feed-table td { padding: 10px 14px; border-bottom: 1px solid #1f2937; color: #d1d5db; }
+        .feed-table tr.new { animation: flash 1s ease-out; }
+        @keyframes flash { from { background: #052e16; } to { background: transparent; } }
+        .feed-table .pass-pill { background: #052e16; color: #86efac; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .feed-table .skip-pill { background: #2e1b04; color: #fcd34d; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .feed-table .skip-high-pill { background: #2e0606; color: #fca5a5; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .feed-disclaimer { background: #1a2025; padding: 10px 20px; font-size: 11px; color: #6b7280; text-align: center; border-top: 1px solid #1f2937; }
+
+        .cta-box { background: #1f2937; border: 1px solid #22c55e40; border-radius: 12px; padding: 24px; margin: 32px 0; text-align: center; }
+        .cta-box h3 { color: #22c55e; margin: 0 0 8px; border: none; padding: 0; }
+        .cta-box p { color: #9ca3af; margin-bottom: 16px; }
+        .cta-btn { display: inline-block; background: #22c55e; color: #0a0f1a; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; }
+        .cta-btn:hover { background: #16a34a; text-decoration: none; }
+        @media (max-width: 640px) { h1 { font-size: 24px; } .container { padding: 20px 16px; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="nav">
+        <a href="/">SsysTech Softwares</a> &middot; <a href="https://zenhodl.net">ZenHodl</a> &middot; <a href="/real-time-sports-data-pipeline-architecture.html">Architecture</a> &middot; <a href="/polymarket-trading-bot-python.html">Trading Bot Guide</a>
+    </div>
+
+    <h1>Real-Time Edge Signals Scanner</h1>
+    <p class="subtitle">Free edge calculator and live demo simulator. Compute the gap between fair probability and market price, account for fees and slippage, and get a quarter-Kelly position size with a signal verdict.</p>
+
+    <div class="tool">
+        <h3>Edge Signal Calculator</h3>
+        <div class="grid">
+            <div class="field">
+                <label for="sport">Sport (sets cost defaults)</label>
+                <select id="sport">
+                    <option value="NBA" data-fee="2" data-slip="2">NBA</option>
+                    <option value="NHL" data-fee="2" data-slip="2">NHL</option>
+                    <option value="MLB" data-fee="2" data-slip="2">MLB</option>
+                    <option value="NCAAMB" data-fee="2" data-slip="3">NCAAMB</option>
+                    <option value="Soccer" data-fee="2" data-slip="3">Soccer</option>
+                    <option value="Tennis" data-fee="2" data-slip="3">Tennis</option>
+                    <option value="CS2" data-fee="2" data-slip="4">CS2</option>
+                    <option value="LoL" data-fee="2" data-slip="3">LoL</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="bankroll">Bankroll ($)</label>
+                <input type="number" id="bankroll" value="1000" min="1" step="50">
+            </div>
+            <div class="field">
+                <label for="fairProb">Model fair probability (%)</label>
+                <input type="number" id="fairProb" value="62" min="1" max="99" step="0.1">
+            </div>
+            <div class="field">
+                <label for="askPrice">Market ask price (¢)</label>
+                <input type="number" id="askPrice" value="54" min="1" max="99" step="0.5">
+            </div>
+            <div class="field">
+                <label for="fee">Taker fee (¢)</label>
+                <input type="number" id="fee" value="2" min="0" max="10" step="0.5">
+            </div>
+            <div class="field">
+                <label for="slip">Expected slippage (¢)</label>
+                <input type="number" id="slip" value="2" min="0" max="10" step="0.5">
+            </div>
+        </div>
+
+        <div class="output" id="output">
+            <div class="row"><span class="label">Raw edge</span><span class="val" id="rawEdge">—</span></div>
+            <div class="row"><span class="label">Cost (fee + slippage)</span><span class="val" id="cost">—</span></div>
+            <div class="row"><span class="label">Effective edge after costs</span><span class="val" id="effEdge">—</span></div>
+            <div class="row"><span class="label">Full Kelly fraction</span><span class="val" id="fullKelly">—</span></div>
+            <div class="row"><span class="label">Quarter Kelly fraction</span><span class="val" id="qKelly">—</span></div>
+            <div class="row"><span class="label">Recommended position size</span><span class="val" id="posSize">—</span></div>
+        </div>
+        <div class="verdict neutral" id="verdict">Enter values above to see the signal verdict.</div>
+    </div>
+
+    <h2>Live Demo Feed (Synthetic)</h2>
+    <p>This panel demonstrates what a real-time edge scanner output looks like across 11 sports. The signals are randomly generated for demonstration; live signals on production trading bots come from actual market and game-state data.</p>
+
+    <div class="feed">
+        <div class="feed-header">
+            <h3><span class="pulse"></span> Demo Signal Feed</h3>
+            <button class="ctrl" id="pauseBtn" onclick="togglePause()">Pause</button>
+        </div>
+        <table class="feed-table">
+            <thead>
+                <tr><th>Time</th><th>Sport</th><th>Token</th><th>Fair</th><th>Ask</th><th>Edge</th><th>Verdict</th></tr>
+            </thead>
+            <tbody id="feedBody"></tbody>
+        </table>
+        <div class="feed-disclaimer">Synthetic demo data &middot; Real signals available via the ZenHodl API</div>
+    </div>
+
+    <h2>How the verdict logic works</h2>
+    <p>The scanner classifies every candidate signal into one of three verdicts based on effective edge after costs:</p>
+    <ul style="margin-left: 24px; color: #d1d5db;">
+        <li><strong style="color: #86efac;">PASS</strong> — effective edge between 5¢ and 18¢. The middle of the distribution is where genuine market mispricing lives. Fire the trade with quarter-Kelly sizing.</li>
+        <li><strong style="color: #fcd34d;">SKIP-low</strong> — effective edge below 5¢. The detected gap is too small to clear costs reliably. Even if it is real, fees and slippage will eat it.</li>
+        <li><strong style="color: #fca5a5;">SKIP-high</strong> — effective edge above 18¢. Counterintuitively, the very largest detected edges are usually the model being wrong, not real opportunity. We learned this expensively on tennis: ATP edges between 20-25¢ ran 31% win rate over 13 trades, while edges between 15-20¢ ran 59% with strong dollar profit.</li>
+    </ul>
+
+    <h2>The math behind it</h2>
+    <p>Edge in cents per share is the model's fair probability (in cents) minus the market ask, minus your costs:</p>
+    <pre><code>raw_edge_c     = fair_prob * 100 - ask_price_c
+cost_c         = taker_fee_c + expected_slippage_c
+effective_edge = raw_edge_c - cost_c</code></pre>
+    <p>Quarter-Kelly position size is the standard professional sizing for situations where your probability estimate has error (which it always does):</p>
+    <pre><code>edge          = fair_prob - ask_price
+profit_per_$  = 1 - ask_price
+full_kelly    = edge / profit_per_$
+quarter_kelly = 0.25 * full_kelly
+position_size = bankroll * quarter_kelly</code></pre>
+    <p>The 0.25 multiplier sacrifices about 25% of theoretical growth to eliminate roughly 90% of the ruin risk. Full Kelly assumes your probability is exactly correct — it is not, ever. <a href="/polymarket-trading-bot-python.html">More on this in our trading bot guide.</a></p>
+
+    <div class="cta-box">
+        <h3>Want signals on real markets, not synthetic ones?</h3>
+        <p>ZenHodl publishes calibrated win probabilities and live edge signals for 11 sports across NBA, NHL, MLB, NCAAMB, NCAAWB, CFB, NFL, soccer, tennis, CS2, and LoL. Seven-day free trial.</p>
+        <a href="https://zenhodl.net/pricing" target="_blank" rel="noopener" class="cta-btn">Try ZenHodl free</a>
+    </div>
+
+    <div class="footer">
+        <p>SsysTech Softwares &middot; Free developer tools for prediction market traders &middot; <a href="https://zenhodl.net">Powered by ZenHodl</a></p>
+    </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ---- Calculator ----
+function recompute() {
+    const fairProbPct = parseFloat($('fairProb').value);
+    const askPriceC = parseFloat($('askPrice').value);
+    const feeC = parseFloat($('fee').value);
+    const slipC = parseFloat($('slip').value);
+    const bankroll = parseFloat($('bankroll').value);
+    if ([fairProbPct, askPriceC, feeC, slipC, bankroll].some(v => isNaN(v) || v < 0)) {
+        setVerdict('neutral', 'Enter valid numbers in all fields.');
+        return;
+    }
+
+    const fairProb = fairProbPct / 100;
+    const askProb = askPriceC / 100;
+    const rawEdgeC = fairProbPct - askPriceC;
+    const costC = feeC + slipC;
+    const effEdgeC = rawEdgeC - costC;
+
+    const profitPerDollar = 1 - askProb;
+    const fullKellyFrac = profitPerDollar > 0 ? (fairProb - askProb) / profitPerDollar : 0;
+    const qKellyFrac = Math.max(0, 0.25 * fullKellyFrac);
+    const positionSize = bankroll * qKellyFrac;
+
+    $('rawEdge').textContent = rawEdgeC.toFixed(1) + '¢';
+    $('cost').textContent = costC.toFixed(1) + '¢';
+    $('effEdge').textContent = effEdgeC.toFixed(1) + '¢';
+    $('fullKelly').textContent = (fullKellyFrac * 100).toFixed(2) + '%';
+    $('qKelly').textContent = (qKellyFrac * 100).toFixed(2) + '%';
+    $('posSize').textContent = '$' + positionSize.toFixed(2);
+
+    if (effEdgeC < 5) {
+        setVerdict('skip-low', `SKIP-low — effective edge ${effEdgeC.toFixed(1)}¢ is below the 5¢ threshold. Costs will eat it.`);
+    } else if (effEdgeC > 18) {
+        setVerdict('skip-high', `SKIP-high — effective edge ${effEdgeC.toFixed(1)}¢ is above the 18¢ ceiling. Detected edges this large are usually model errors, not opportunity.`);
+    } else {
+        setVerdict('pass', `PASS — fire $${positionSize.toFixed(2)} on the YES side at ${askPriceC}¢. Hold to settlement.`);
+    }
+}
+function setVerdict(cls, msg) {
+    const v = $('verdict');
+    v.className = 'verdict ' + cls;
+    const parts = msg.split(' — ');
+    v.innerHTML = parts.length > 1
+        ? `<div>${parts[0]}</div><div class="verdict-detail">${parts.slice(1).join(' — ')}</div>`
+        : msg;
+}
+['fairProb', 'askPrice', 'fee', 'slip', 'bankroll'].forEach(id => $(id).addEventListener('input', recompute));
+$('sport').addEventListener('change', () => {
+    const opt = $('sport').selectedOptions[0];
+    $('fee').value = opt.dataset.fee;
+    $('slip').value = opt.dataset.slip;
+    recompute();
+});
+recompute();
+
+// ---- Demo feed ----
+const SPORTS = [
+    { code: 'NBA', games: ['LAL/BOS', 'DEN/MIA', 'GSW/PHX', 'NYK/MIL'] },
+    { code: 'NHL', games: ['EDM/COL', 'TOR/MTL', 'VGK/DAL'] },
+    { code: 'MLB', games: ['NYY/BOS', 'LAD/SF', 'HOU/SEA'] },
+    { code: 'NCAAMB', games: ['DUKE/UNC', 'KU/KSU', 'GONZ/SMC'] },
+    { code: 'Soccer', games: ['ARS/MCI', 'BAR/RMA', 'BAY/DOR'] },
+    { code: 'Tennis', games: ['Alcaraz/Sinner', 'Swiatek/Sabalenka'] },
+    { code: 'CS2', games: ['NAVI/G2', 'FAZE/VITALITY'] },
+    { code: 'LoL', games: ['T1/GenG', 'C9/TL'] },
+];
+let feedPaused = false;
+let signalCount = 0;
+function genSignal() {
+    if (feedPaused) return;
+    const sport = SPORTS[Math.floor(Math.random() * SPORTS.length)];
+    const game = sport.games[Math.floor(Math.random() * sport.games.length)];
+    // Generate plausible fair / ask
+    const fair = 35 + Math.random() * 45; // 35-80%
+    const noise = (Math.random() - 0.5) * 35; // -17.5 to +17.5 cents of edge
+    const ask = Math.max(5, Math.min(95, fair + noise));
+    const edge = fair - ask - 4; // assume 2c fee + 2c slip
+    let verdictClass, verdictText;
+    if (edge < 5) { verdictClass = 'skip-pill'; verdictText = 'SKIP-low'; }
+    else if (edge > 18) { verdictClass = 'skip-high-pill'; verdictText = 'SKIP-high'; }
+    else { verdictClass = 'pass-pill'; verdictText = 'PASS'; }
+    const t = new Date();
+    const ts = t.toTimeString().slice(0, 8);
+    const tr = document.createElement('tr');
+    tr.className = 'new';
+    tr.innerHTML = `
+        <td>${ts}</td>
+        <td>${sport.code}</td>
+        <td>${game}</td>
+        <td>${fair.toFixed(1)}%</td>
+        <td>${ask.toFixed(1)}¢</td>
+        <td style="color: ${edge >= 0 ? '#86efac' : '#fca5a5'}">${edge >= 0 ? '+' : ''}${edge.toFixed(1)}¢</td>
+        <td><span class="${verdictClass}">${verdictText}</span></td>
+    `;
+    const body = $('feedBody');
+    body.insertBefore(tr, body.firstChild);
+    while (body.children.length > 12) body.removeChild(body.lastChild);
+    signalCount++;
+}
+function togglePause() {
+    feedPaused = !feedPaused;
+    $('pauseBtn').textContent = feedPaused ? 'Resume' : 'Pause';
+}
+// Seed with a few entries immediately
+for (let i = 0; i < 5; i++) genSignal();
+setInterval(genSignal, 2500);
+</script>
+</body>
+</html>
