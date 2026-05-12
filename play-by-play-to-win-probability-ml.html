@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>From Play-By-Play to Edge: Turning Game-State Snapshots Into Win Probabilities With ML | SsysTech Softwares</title>
+    <meta name="description" content="The end-to-end pipeline that converts raw play-by-play game state into a calibrated, tradable win probability — feature engineering choices, model architecture, calibration, and the labeling traps that wreck most attempts.">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://ssystechsoftwares.com/play-by-play-to-win-probability-ml.html">
+    <meta property="og:title" content="From Play-By-Play to Edge: Turning Game-State Snapshots Into Win Probabilities With ML">
+    <meta property="og:description" content="Feature engineering, model architecture, and calibration for sports win-probability models — the production pipeline.">
+    <meta property="og:type" content="article">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0f1a; color: #d1d5db; line-height: 1.7; }
+        a { color: #22c55e; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .container { max-width: 780px; margin: 0 auto; padding: 40px 24px; }
+        nav { border-bottom: 1px solid #1f2937; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        nav .brand { color: #fff; font-weight: 700; font-size: 18px; }
+        nav .links a { margin-left: 20px; font-size: 14px; color: #9ca3af; }
+        h1 { color: #fff; font-size: 32px; margin: 40px 0 16px; line-height: 1.3; }
+        h2 { color: #fff; font-size: 22px; margin: 36px 0 12px; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+        h3 { color: #e5e7eb; font-size: 17px; margin: 24px 0 8px; }
+        p { margin: 12px 0; font-size: 15px; }
+        .meta { color: #6b7280; font-size: 13px; margin-bottom: 32px; }
+        pre { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; font-size: 13px; line-height: 1.5; }
+        code { font-family: 'SF Mono', Monaco, 'Consolas', monospace; color: #86efac; }
+        .inline-code { background: #1f2937; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+        .callout { background: #1f2937; border-left: 3px solid #22c55e; padding: 16px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+        .callout-warn { border-left-color: #f59e0b; }
+        .callout p { margin: 0; font-size: 14px; }
+        .cta { background: linear-gradient(135deg, #065f46, #064e3b); border: 1px solid #10b981; border-radius: 12px; padding: 24px; margin: 32px 0; text-align: center; }
+        .cta h3 { color: #fff; margin: 0 0 8px; }
+        .cta p { color: #9ca3af; font-size: 14px; margin: 0 0 16px; }
+        .cta a.btn { background: #22c55e; color: #000; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; text-decoration: none; }
+        ul, ol { margin: 12px 0 12px 24px; font-size: 15px; }
+        li { margin: 6px 0; }
+        footer { border-top: 1px solid #1f2937; padding: 24px; text-align: center; color: #6b7280; font-size: 12px; margin-top: 60px; }
+        strong { color: #e5e7eb; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" class="brand">SsysTech Softwares</a>
+        <div class="links">
+            <a href="https://zenhodl.net">ZenHodl</a>
+            <a href="https://zenhodl.net/docs">API Docs</a>
+            <a href="https://zenhodl.net/results">Live Results</a>
+        </div>
+    </nav>
+    <div class="container">
+        <h1>From Play-By-Play to Edge: Turning Game-State Snapshots Into Win Probabilities With ML</h1>
+        <p class="meta">May 11, 2026 &middot; 13 min read &middot; XGBoost, Calibration, Feature Engineering, Python</p>
+
+        <p>The path from raw play-by-play data to a tradable win probability is not a single ML problem. It is four problems in a row: labeling, feature engineering, model selection, and calibration. Skip any of them and the resulting probability is either wrong or unactionable. This post walks through the full pipeline at the level of detail you would need to ship one yourself.</p>
+
+        <h2>The labeling problem</h2>
+        <p>The naive label is "did the home team win this game." Apply it to every play-by-play snapshot and you have a binary classification dataset.</p>
+        <p>This works, but it has a subtle issue: every snapshot from the same game gets the same label. A model trained on this dataset can memorize game-specific patterns that do not generalize. Worse, if you split the dataset by random row, snapshots from the same game can land in both train and test, leaking information.</p>
+        <div class="callout callout-warn">
+            <p><strong>Always split by game, not by row.</strong> Hold out entire games for the test set. The full case for game-level splits is in <a href="https://zenhodl.net/static/notebooklm_16_walk_forward_validation.md">our walk-forward validation post</a>.</p>
+        </div>
+        <p>An alternative labeling approach is the score margin at end-of-game minus the score margin at the snapshot. This produces a regression target rather than classification and gives the model more information to learn from. We use both: classification for moneyline, regression for spread/total. Same play-by-play snapshots, different labels.</p>
+
+        <h2>Feature engineering: what the model needs to know</h2>
+        <p>The base feature set for any sport win-probability model includes:</p>
+        <ul>
+            <li><strong>Score differential</strong> (home_score - away_score)</li>
+            <li><strong>Time remaining</strong> in seconds, normalized to [0, 1]</li>
+            <li><strong>Period or quarter</strong> as a categorical or one-hot</li>
+            <li><strong>Pre-game win probability</strong> from your team-strength model (Elo, FiveThirtyEight, KenPom)</li>
+            <li><strong>Possession indicator</strong> for sports where it matters (basketball, football)</li>
+        </ul>
+        <p>That gets you a passable model. The features that meaningfully improve performance are sport-specific.</p>
+        <p>For basketball: <strong>pace</strong> (estimated possessions per 48 min), <strong>offensive rating diff</strong>, <strong>defensive rating diff</strong>, <strong>foul situation</strong> (free throws are a clock-killer in close games).</p>
+        <p>For hockey: <strong>shots on goal differential</strong>, <strong>power-play state</strong>, <strong>empty-net flag</strong> (massive late-game effect).</p>
+        <p>For football: <strong>down</strong>, <strong>distance</strong>, <strong>field position</strong>, <strong>possession</strong>, <strong>two-minute warning flag</strong>.</p>
+        <p>For soccer: <strong>red cards</strong>, <strong>elapsed minute</strong>, <strong>shot accumulation</strong>. The model is fundamentally a Poisson process not an XGBoost.</p>
+        <p>For tennis: <strong>set count</strong>, <strong>game count</strong>, <strong>point count</strong>, <strong>tiebreak flag</strong>, <strong>server identity</strong>. The model is hierarchical (point &rarr; game &rarr; set &rarr; match), not flat.</p>
+
+        <h2>Engineered interaction features</h2>
+        <p>Beyond raw features, three engineered interactions consistently lift model performance:</p>
+        <pre><code># Score-time interaction: a 5-point lead with 2 minutes left is very different
+# from a 5-point lead with 30 minutes left
+df["score_diff_x_time_remaining"] = df["score_diff"] * df["time_remaining"]
+
+# Squared score diff: closeness matters non-linearly
+df["score_diff_sq"] = df["score_diff"] ** 2
+
+# Score diff scaled by Elo gap: a 5-point lead from the underdog is more
+# meaningful than a 5-point lead from the favorite
+df["score_diff_x_elo"] = df["score_diff"] * df["elo_diff"]</code></pre>
+        <p>These three features combined typically add 1-3 percentage points of AUC over the raw feature set. Worth the few lines of code.</p>
+
+        <h2>Model selection</h2>
+        <p>For most sports (basketball, hockey, football, baseball, esports), XGBoost with 300-500 trees, max depth 4-6, learning rate 0.03-0.08 is a strong default. Tune via cross-validation on the per-sport dataset.</p>
+        <pre><code>from xgboost import XGBClassifier
+
+clf = XGBClassifier(
+    n_estimators=400,
+    max_depth=5,
+    learning_rate=0.05,
+    subsample=0.8,
+    colsample_bytree=0.8,
+    objective="binary:logistic",
+    eval_metric="logloss",
+    early_stopping_rounds=20,
+    random_state=42,
+)
+clf.fit(
+    X_train, y_train,
+    eval_set=[(X_val, y_val)],
+    verbose=False,
+)</code></pre>
+        <p>For soccer, the right architecture is a Poisson process model with team-specific attack/defense rates and league-strength normalization. XGBoost on soccer wastes the structure of the problem.</p>
+        <p>For tennis, the right architecture is a hierarchical point-game-set-match model with surface-adjusted serve rates. The point-level Bernoulli rolls up to game-level via deuce dynamics, then to set-level, then to match-level.</p>
+        <p>The general principle: match the model architecture to the natural structure of the sport. A flat XGBoost on tennis loses to a properly-built hierarchical model by 4-6 percentage points of accuracy.</p>
+
+        <h2>Calibration</h2>
+        <p>A trained classifier produces probabilities, but they are usually not well-calibrated. Train an isotonic regression on a held-out set to map raw probabilities to calibrated ones:</p>
+        <pre><code>from sklearn.isotonic import IsotonicRegression
+import numpy as np
+
+raw_probs = clf.predict_proba(X_calib)[:, 1]
+iso = IsotonicRegression(out_of_bounds="clip")
+iso.fit(raw_probs, y_calib)
+
+# At inference
+def predict_calibrated(features):
+    raw = clf.predict_proba(features)[:, 1]
+    return iso.transform(raw)</code></pre>
+        <p>Always evaluate calibration with Expected Calibration Error after fitting:</p>
+        <pre><code>def expected_calibration_error(y_true, y_prob, n_bins=15):
+    bins = np.linspace(0, 1, n_bins + 1)
+    ece = 0.0
+    for lo, hi in zip(bins[:-1], bins[1:]):
+        mask = (y_prob >= lo) & (y_prob < hi)
+        if mask.sum() == 0:
+            continue
+        bin_acc = y_true[mask].mean()
+        bin_conf = y_prob[mask].mean()
+        ece += (mask.sum() / len(y_true)) * abs(bin_acc - bin_conf)
+    return ece</code></pre>
+        <p>Aim for ECE under 0.05 in production. Above 0.07 and the probabilities are not safe to size positions against. Above 0.10 and the model is broken.</p>
+
+        <h2>Live recalibration</h2>
+        <p>Calibration drifts. The team strengths your model learned three months ago are no longer accurate. Player injuries, trades, and rule changes shift the underlying distributions.</p>
+        <p>Two countermeasures:</p>
+        <p><strong>Periodic retraining</strong> on a fresh slice of recent data. We retrain the moneyline models weekly. This catches medium-term drift without making the model unstable.</p>
+        <p><strong>Live recalibration</strong> via a rolling isotonic on the most recent N=500 outcomes per sport. This catches short-term drift without requiring a full retrain. The recalibrator runs in-process and adjusts the model's output before it reaches the trading layer.</p>
+        <pre><code>from collections import deque
+from sklearn.isotonic import IsotonicRegression
+
+class RollingRecalibrator:
+    def __init__(self, window=500):
+        self.window = window
+        self.preds = deque(maxlen=window)
+        self.actuals = deque(maxlen=window)
+        self._iso = None
+    def record(self, pred, actual):
+        self.preds.append(pred)
+        self.actuals.append(actual)
+        if len(self.preds) >= 50:
+            self._iso = IsotonicRegression(out_of_bounds="clip")
+            self._iso.fit(list(self.preds), list(self.actuals))
+    def adjust(self, raw_prob):
+        if self._iso is None:
+            return raw_prob
+        return float(self._iso.transform([raw_prob])[0])</code></pre>
+        <p>The combination of weekly retraining and live recalibration keeps ECE within bounds across the whole season.</p>
+
+        <h2>End-to-end</h2>
+        <p>Putting it together, a single inference path looks like:</p>
+        <pre><code>def predict_win_probability(sport, game_state):
+    # 1. Featurize
+    features = featurize(sport, game_state)
+    # 2. Base model
+    raw_prob = SPORT_MODELS[sport].predict_proba([features])[:, 1][0]
+    # 3. Calibrate (offline isotonic)
+    calibrated = SPORT_CALIBRATORS[sport].transform([raw_prob])[0]
+    # 4. Live recalibrate (rolling isotonic)
+    final = RECALIBRATORS[sport].adjust(calibrated)
+    return float(final)</code></pre>
+        <p>Four steps. Each one matters. Skip the recalibrator and your model drifts. Skip the calibrator and Kelly sizing breaks. Skip the featurizer and the model never converges. Skip the base model and you have nothing to calibrate.</p>
+
+        <h2>The bottom line</h2>
+        <p>Going from play-by-play to a tradable win probability is a four-stage pipeline: label correctly (split by game), engineer features that match the sport's structure, choose a model architecture that respects the natural shape of the problem, and calibrate continuously. Each stage adds value. Each missing stage breaks something downstream.</p>
+
+        <div class="cta">
+            <h3>The production version of this pipeline</h3>
+            <p>ZenHodl runs win-probability models for 11 sports using exactly the pipeline described in this post. Per-sport ECE published. Free seven-day trial.</p>
+            <a class="btn" href="https://zenhodl.net/pricing">Try ZenHodl free</a>
+        </div>
+    </div>
+    <footer>SsysTech Softwares &middot; Production engineering for prediction-market traders &middot; <a href="https://zenhodl.net">Powered by ZenHodl</a></footer>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Build a Production-Grade Sports Prediction API from ESPN's JSON Feeds | SsysTech Softwares</title>
+    <meta name="description" content="Step-by-step guide to building a production-grade sports prediction API on top of ESPN's undocumented JSON endpoints — scrape, parse, model, calibrate, serve. Working Python code throughout.">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://ssystechsoftwares.com/production-sports-prediction-api-from-espn.html">
+    <meta property="og:title" content="How to Build a Production-Grade Sports Prediction API from ESPN's JSON Feeds">
+    <meta property="og:description" content="The full pipeline: ESPN scoreboard scraping, schema design, XGBoost modeling, isotonic calibration, FastAPI serving — production-tested code.">
+    <meta property="og:type" content="article">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0f1a; color: #d1d5db; line-height: 1.7; }
+        a { color: #22c55e; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .container { max-width: 780px; margin: 0 auto; padding: 40px 24px; }
+        nav { border-bottom: 1px solid #1f2937; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        nav .brand { color: #fff; font-weight: 700; font-size: 18px; }
+        nav .links a { margin-left: 20px; font-size: 14px; color: #9ca3af; }
+        h1 { color: #fff; font-size: 32px; margin: 40px 0 16px; line-height: 1.3; }
+        h2 { color: #fff; font-size: 22px; margin: 36px 0 12px; border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
+        h3 { color: #e5e7eb; font-size: 17px; margin: 24px 0 8px; }
+        p { margin: 12px 0; font-size: 15px; }
+        .meta { color: #6b7280; font-size: 13px; margin-bottom: 32px; }
+        pre { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; font-size: 13px; line-height: 1.5; }
+        code { font-family: 'SF Mono', Monaco, 'Consolas', monospace; color: #86efac; }
+        .inline-code { background: #1f2937; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+        .callout { background: #1f2937; border-left: 3px solid #22c55e; padding: 16px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+        .callout p { margin: 0; font-size: 14px; }
+        .cta { background: linear-gradient(135deg, #065f46, #064e3b); border: 1px solid #10b981; border-radius: 12px; padding: 24px; margin: 32px 0; text-align: center; }
+        .cta h3 { color: #fff; margin: 0 0 8px; }
+        .cta p { color: #9ca3af; font-size: 14px; margin: 0 0 16px; }
+        .cta a.btn { background: #22c55e; color: #000; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; text-decoration: none; }
+        ul, ol { margin: 12px 0 12px 24px; font-size: 15px; }
+        li { margin: 6px 0; }
+        footer { border-top: 1px solid #1f2937; padding: 24px; text-align: center; color: #6b7280; font-size: 12px; margin-top: 60px; }
+        strong { color: #e5e7eb; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" class="brand">SsysTech Softwares</a>
+        <div class="links">
+            <a href="https://zenhodl.net">ZenHodl</a>
+            <a href="https://zenhodl.net/docs">API Docs</a>
+            <a href="https://zenhodl.net/results">Live Results</a>
+        </div>
+    </nav>
+    <div class="container">
+        <h1>How to Build a Production-Grade Sports Prediction API from ESPN's JSON Feeds</h1>
+        <p class="meta">May 11, 2026 &middot; 14 min read &middot; Python, FastAPI, ESPN, XGBoost, Production</p>
+
+        <p>Building a sports prediction API on top of free public data sources is one of those projects that looks easy in a notebook and gets dramatically harder when you put it in production. The model is a small fraction of the work. The pipeline around it &mdash; scraping, schema design, calibration, latency management, monitoring &mdash; is where production-grade lives.</p>
+
+        <p>This post walks through the architecture of the live API we run, from the ESPN scoreboard scrape at the bottom to the calibrated probability response at the top. Code is in Python; the pattern generalizes to any language.</p>
+
+        <h2>1. The data source: ESPN's undocumented JSON endpoints</h2>
+        <p>Every game on ESPN.com is backed by a JSON feed at a predictable URL. The base scoreboard endpoint for any sport follows the pattern:</p>
+        <pre><code>https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard</code></pre>
+        <p>For example, NBA's scoreboard is at <span class="inline-code">basketball/nba/scoreboard</span>; NHL's is at <span class="inline-code">hockey/nhl/scoreboard</span>. The response is JSON with all live games, scores, time remaining, and team identifiers. No authentication. No rate limit posted but ~1 request per second per sport is safe in practice.</p>
+        <p>For per-game detail, the summary endpoint provides play-by-play, win-probability fields populated by ESPN's own model, and starter lineups:</p>
+        <pre><code>https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/summary?event={game_id}</code></pre>
+        <p>These endpoints have been stable since at least 2020. They are not officially documented &mdash; ESPN publishes them implicitly to power their own apps. Treat them as a stable but unofficial source: poll defensively, cache aggressively, and have a fallback (official league API or paid Sportradar) for when ESPN occasionally rate-limits or returns garbage.</p>
+
+        <h2>2. Defensive scraping pattern</h2>
+        <p>The naive approach is <span class="inline-code">requests.get(url).json()</span> in a loop. The production approach handles every failure mode you will hit at 3 AM on a major game night:</p>
+        <pre><code>import requests, time, logging
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+SESSION = requests.Session()
+SESSION.headers.update({"User-Agent": "ZenHodl/1.0 (+https://zenhodl.net)"})
+
+def fetch_espn(url: str, timeout: float = 8.0, retries: int = 3) -> Optional[dict]:
+    last_err = None
+    for attempt in range(retries):
+        try:
+            r = SESSION.get(url, timeout=timeout)
+            if r.status_code == 429:
+                # Respect Retry-After if present, else exponential backoff
+                wait = int(r.headers.get("Retry-After", 2 ** attempt))
+                logger.warning(f"ESPN 429, waiting {wait}s")
+                time.sleep(wait)
+                continue
+            r.raise_for_status()
+            return r.json()
+        except (requests.RequestException, ValueError) as e:
+            last_err = e
+            time.sleep(2 ** attempt)
+    logger.error(f"ESPN fetch failed after {retries}: {url} ({last_err})")
+    return None</code></pre>
+        <p>Three things this pattern gets right that the naive version does not: it respects the <span class="inline-code">Retry-After</span> header on 429 responses, it does exponential backoff on transient errors, and it returns <span class="inline-code">None</span> on total failure rather than crashing the entire poll loop. Your bot keeps going on the games that succeeded.</p>
+
+        <h2>3. Schema design for multi-sport coverage</h2>
+        <p>The temptation in a single-sport API is to expose ESPN's response shape directly. The mistake becomes obvious at sport three: ESPN's schema for NBA has <span class="inline-code">period</span>, NHL has <span class="inline-code">period</span>, but soccer has <span class="inline-code">clock.displayValue</span> as <span class="inline-code">"45'+3'"</span> with no integer period at all.</p>
+        <p>The right design splits the response into common metadata and sport-specific state. Common: <span class="inline-code">game_id, sport, home_team, away_team, start_time, as_of</span>. Sport-specific state lives in a nested object whose schema is documented separately per sport. Outcomes live in a list of named-probability objects (binary for most sports, three-way for soccer).</p>
+        <pre><code>{
+  "sport": "NBA",
+  "game_id": "401705412",
+  "home_team": "LAL",
+  "away_team": "BOS",
+  "start_time": "2026-05-11T02:30:00Z",
+  "as_of": "2026-05-11T03:14:33Z",
+  "outcomes": [
+    {"name": "home", "prob": 0.617, "prob_calibrated": 0.604},
+    {"name": "away", "prob": 0.383, "prob_calibrated": 0.396}
+  ],
+  "state": {
+    "quarter": 3,
+    "score_home": 67,
+    "score_away": 71,
+    "time_remaining_sec": 442
+  }
+}</code></pre>
+        <p>This shape stays the same across sports. The <span class="inline-code">state</span> object varies. A consumer that only cares about probabilities reads the <span class="inline-code">outcomes</span> array. A consumer that wants to render the live game reads <span class="inline-code">state</span> based on the sport.</p>
+
+        <h2>4. The model layer: XGBoost + isotonic calibration</h2>
+        <p>For most sports, an XGBoost classifier with isotonic calibration on top is the right starting point. XGBoost handles the feature interactions; isotonic regression rescales the probabilities to be calibrated against observed outcomes.</p>
+        <pre><code>from xgboost import XGBClassifier
+from sklearn.isotonic import IsotonicRegression
+import numpy as np
+
+# Train base model
+clf = XGBClassifier(
+    n_estimators=400,
+    max_depth=5,
+    learning_rate=0.05,
+    objective="binary:logistic",
+)
+clf.fit(X_train, y_train)
+
+# Fit isotonic calibrator on a held-out set
+raw_probs = clf.predict_proba(X_calib)[:, 1]
+iso = IsotonicRegression(out_of_bounds="clip")
+iso.fit(raw_probs, y_calib)
+
+# At inference: predict, then calibrate
+def predict_calibrated(features):
+    raw = clf.predict_proba(features)[:, 1]
+    return iso.transform(raw)</code></pre>
+        <p>Always evaluate calibration. Expected Calibration Error is the right metric: bin predictions into 10-15 buckets, compute the absolute difference between the bin's mean predicted probability and its observed frequency, weight by bin size. Aim for ECE under 0.05 in production.</p>
+
+        <h2>5. Serving: FastAPI on a single VPS</h2>
+        <p>FastAPI is the right choice for a Python prediction API. Async-friendly, auto-generated OpenAPI docs, Pydantic models for request/response validation. A single FastAPI worker can comfortably handle a few hundred requests per second; a fleet of four workers behind a process manager handles thousands.</p>
+        <pre><code>from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+app = FastAPI()
+
+class PredictionResponse(BaseModel):
+    sport: str
+    game_id: str
+    fair_prob_home: float
+    fair_prob_calibrated: float
+    as_of: str
+
+@app.get("/v1/predict/{sport}/{game_id}", response_model=PredictionResponse)
+async def predict(sport: str, game_id: str):
+    state = get_live_state(sport, game_id)
+    if state is None:
+        raise HTTPException(404, f"No live state for {sport}/{game_id}")
+    raw, calibrated = predict_for(sport, state)
+    return PredictionResponse(
+        sport=sport,
+        game_id=game_id,
+        fair_prob_home=raw,
+        fair_prob_calibrated=calibrated,
+        as_of=state["as_of"],
+    )</code></pre>
+        <p>The <span class="inline-code">get_live_state</span> function reads from a hot in-memory cache populated by a separate background poller. The API never blocks on an external HTTP call &mdash; if the cache does not have current state, the request returns 404 rather than waiting on ESPN.</p>
+
+        <h2>6. Background polling architecture</h2>
+        <p>The polling layer runs as a separate task pool, one task per sport. Each task polls its sport's scoreboard on a sport-appropriate cadence (NBA every 5s, MLB every 10s, soccer every 15s), updates the in-memory cache, and emits diagnostic logs.</p>
+        <pre><code>import asyncio
+
+CACHE = {}  # game_id -> state
+
+async def poll_sport(sport: str, cadence_sec: int):
+    while True:
+        try:
+            data = fetch_espn(scoreboard_url(sport))
+            if data:
+                for event in data.get("events", []):
+                    state = parse_event(event)
+                    CACHE[state["game_id"]] = state
+        except Exception as e:
+            logger.exception(f"Polling failed for {sport}: {e}")
+        await asyncio.sleep(cadence_sec)
+
+@app.on_event("startup")
+async def startup():
+    sports = [("NBA", 5), ("NHL", 5), ("MLB", 10), ("soccer", 15)]
+    for sport, cadence in sports:
+        asyncio.create_task(poll_sport(sport, cadence))</code></pre>
+        <p>This pattern decouples the API response latency from the upstream poll latency. Even if ESPN is having a bad day, the API stays responsive.</p>
+
+        <h2>7. Production monitoring</h2>
+        <p>Three metrics matter most:</p>
+        <ul>
+            <li><strong>Per-sport poll lag.</strong> Time between successful upstream polls for each sport. If lag exceeds 30 seconds, alert.</li>
+            <li><strong>Per-sport ECE drift.</strong> Compute weekly. If ECE rises above your threshold (we use 0.05), retrain or recalibrate.</li>
+            <li><strong>Request latency p99.</strong> Should stay under 100ms for cache hits. If it climbs, investigate (usually a cache miss path or a model load issue).</li>
+        </ul>
+
+        <h2>8. The non-obvious failures</h2>
+        <p>Production will surface failure modes your local dev environment never showed:</p>
+        <ul>
+            <li><strong>ESPN occasionally returns stale data.</strong> The HTTP response is fresh, but the scoreboard payload is hours old. Mitigation: parse and cross-check against the <span class="inline-code">date</span> field.</li>
+            <li><strong>The same game can have two ESPN game_ids.</strong> Postponements, suspensions, and reschedules sometimes generate a duplicate. Dedup by team pair plus date.</li>
+            <li><strong>Sklearn version mismatch on pickle load.</strong> Train on sklearn 1.8.0, load on 1.7.x, get an AttributeError on inference. Pin the version in <span class="inline-code">requirements.txt</span>.</li>
+        </ul>
+
+        <h2>The bottom line</h2>
+        <p>A production-grade sports prediction API is 10% modeling and 90% pipeline. ESPN's JSON feeds give you the raw material for free. Defensive scraping, decoupled polling, careful schema design, and continuous calibration monitoring are what turn the raw material into a service you can charge for.</p>
+
+        <div class="cta">
+            <h3>The production version of this stack</h3>
+            <p>ZenHodl runs the architecture described in this post across 11 sports. Calibrated probabilities, sub-30-second updates, free seven-day trial.</p>
+            <a class="btn" href="https://zenhodl.net/pricing">Try ZenHodl free</a>
+        </div>
+    </div>
+    <footer>SsysTech Softwares &middot; Production engineering for prediction-market traders &middot; <a href="https://zenhodl.net">Powered by ZenHodl</a></footer>
+</body>
+</html>
